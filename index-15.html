@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>판례·법령 뷰어</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<style>
+html,body{margin:0;height:100%}#root{height:100dvh}
+body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;color:#111;background:#fff;font-weight:300}
+b,.t{letter-spacing:-.02em}mark{color:inherit;border-radius:2px}::selection{background:#E6EBE1}
+button,input{font:inherit;letter-spacing:inherit}button{cursor:pointer}
+.sb::-webkit-scrollbar{width:6px}.sb::-webkit-scrollbar-thumb{background:#E5E5E5;border-radius:3px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+const GH='https://api.github.com/repos/legalize-kr/';
+const P={
+search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',
+cr:'<path d="m9 18 6-6-6-6"/>',cd:'<path d="m6 9 6 6 6-6"/>',cl:'<path d="m15 18-6-6 6-6"/>',
+pl:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',pr:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>',
+bm:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',book:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+er:'<path d="M20 20H8L3.5 15.5a2 2 0 0 1 0-2.8l9-9a2 2 0 0 1 2.8 0l5.2 5.2a2 2 0 0 1 0 2.8L12 20"/>',
+key:'<circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+ext:'<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+ud:'<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>',du:'<path d="m7 20 5-5 5 5M7 4l5 5 5-5"/>',tag:'<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r=".5"/>'};
+const Ic=({n,s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{__html:P[n]}}/>;
+const COL={a:'#DDE6D3',b:'#EFE5CF',c:'#E4DCD6'};
+const enc=p=>p.split('/').map(encodeURIComponent).join('/');
+const cache={};
+const gh=async(u,tok)=>{const r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}}).catch(x=>{throw Error('GitHub 요청 실패('+x.message+'). 토큰에 공백·한글·줄바꿈이 섞였거나, 광고/보안 차단 확장 프로그램이 api.github.com을 막고 있을 수 있습니다.')});const j=await r.json();if(!r.ok)throw Error(j.message||r.status);return j};
+const list=async(repo,path,tok)=>{const k=repo+'/'+path;if(cache[k])return cache[k];
+ const j=await gh(`/repos/legalize-kr/${repo}/git/trees/main${path?':'+enc(path):''}`,tok);
+ const r=j.tree.map(t=>({n:t.path,d:t.type==='tree'})).filter(t=>t.d||t.n.endsWith('.md')&&t.n!=='README.md');
+ r.sort((a,b)=>a.d!==b.d?b.d-a.d:repo==='precedent-kr'&&!a.d?(b.n.split('_')[1]||'').localeCompare(a.n.split('_')[1]||''):a.n.localeCompare(b.n,'ko'));
+ return cache[k]=r};
+const disp=s=>{const hd=[];const t=s.trim().split('\n').map((l,i)=>{if(/^#{3,6} /.test(l)){hd.push(i);l=l.replace(/^#+ /,'')}return l.replace(/\*\*/g,'')}).join('\n');return{t,hd}};
+function parse(txt,repo,path){
+ const m=txt.match(/^---\n([\s\S]*?)\n---\n?/),fm={};
+ if(m)m[1].split('\n').forEach(l=>{const x=l.match(/^([^\s:][^:]*):\s*(.*)$/);if(x)fm[x[1]]=x[2].replace(/^['"]|['"]$/g,'')});
+ let body=m?txt.slice(m[0].length):txt;const tm=body.match(/^\s*# (.+)\n/);
+ const title=tm?tm[1]:fm.사건명||fm.제목||fm.행정규칙명||path.split('/').pop();
+ if(tm)body=body.slice(tm.index+tm[0].length);
+ const parts=body.split(/^## /m),secs=[];
+ if(parts[0].trim())secs.push({h:'',...disp(parts[0])});
+ parts.slice(1).forEach(p=>{const i=p.indexOf('\n');secs.push({h:p.slice(0,i).trim(),...disp(p.slice(i+1))})});
+ const meta=(repo==='precedent-kr'?[fm.법원명,fm.선고일자,fm.사건번호]:repo==='legalize-kr'?[fm.법령구분,fm.시행일자,(fm.소관부처||'').replace(/[\[\]]/g,'')]:[fm.행정규칙종류,fm.발령일자,fm.소관부처명]).filter(Boolean).join(' · ');
+ return{id:repo+':'+path,repo,path,title,meta,secs,src:fm.출처}}
+const KEY=/^(판시사항|판결요지|결정요지)$/;
+const label=(repo,n,path)=>{const s=n.replace(/\.md$/,'');if(repo==='precedent-kr'){const p=s.split('_');return{a:p.slice(2).join(' ')||s,b:p[0]+' · '+(p[1]||'')}}
+ return{a:n==='본문.md'?path.split('/').pop():s}};
+
+function Empty({t}){return <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#B5B5B5]"><Ic n="book" s={22}/><span className="text-xs">{t}</span></div>}
+
+function Browse({repo,root,tok,open}){
+ const [path,setPath]=useState(root),[ls,setLs]=useState(null),[err,setErr]=useState(''),[q,setQ]=useState(''),[n,setN]=useState(80),[hits,setHits]=useState(null);
+ useEffect(()=>{setPath(root);setQ('');setHits(null)},[repo,root]);
+ useEffect(()=>{setQ('');setHits(null)},[path]);
+ useEffect(()=>{let ok=1;setLs(null);setErr('');setN(80);
+  list(repo,path,tok).then(r=>{if(!ok)return;setLs(r);if(path&&r.length===1&&!r[0].d)open(repo,path+'/'+r[0].n)}).catch(e=>ok&&setErr(e.message));return()=>{ok=0}},[repo,path]);
+ const full=async()=>{if(!q.trim())return;if(!tok)return setErr('본문 검색에는 GitHub 토큰이 필요합니다.');setErr('');
+  try{const j=await gh(`/search/code?q=${encodeURIComponent(q+' repo:legalize-kr/'+repo)}&per_page=40`,tok);setHits(j.items.map(i=>({n:i.path,d:false,full:true})))}catch(e){setErr(e.message)}};
+ const terms=q.trim().split(/\s+/).filter(Boolean);
+ const rows=(hits||(ls||[]).filter(e=>terms.every(t=>e.n.includes(t)))).slice(0,n);
+ const rel=path.slice(root.length).replace(/^\//,'');
+ return <div className="flex flex-col min-h-0 flex-1">
+  <div className="px-4 pt-3 flex items-center gap-2">
+   <div className="flex-1 flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
+    <input value={q} onChange={e=>{setQ(e.target.value);setHits(null)}} onKeyDown={e=>e.key==='Enter'&&e.shiftKey&&full()} placeholder="이름 필터" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div>
+   <button onClick={full} title="본문 검색(토큰 필요)" className="h-9 px-2.5 text-xs border border-[#E5E5E5] rounded-md text-[#555] hover:border-[#111] transition-colors">본문</button>
+  </div>
+  <div className="px-4 py-2 flex items-center gap-1 text-xs text-[#777] min-h-[2rem]">
+   {rel&&<button onClick={()=>setPath(path.includes('/')&&path!==root?path.split('/').slice(0,-1).join('/'):root)} className="hover:text-[#111]"><Ic n="cl" s={15}/></button>}
+   <span className="truncate">{hits?'본문 검색 결과':rel||'전체'}</span>
+  </div>
+  <div className="sb flex-1 overflow-y-auto px-2 pb-4">
+   {err&&<p className="px-2 py-3 text-xs text-[#8a5a44]">{err}</p>}
+   {!ls&&!err&&<p className="px-2 py-3 text-xs text-[#999]">불러오는 중</p>}
+   {ls&&!rows.length&&<Empty t="결과가 없습니다"/>}
+   {rows.map(e=>{const p=e.full?e.n:(path?path+'/':'')+e.n;const L=label(repo,e.full?e.n.split('/').pop():e.n,p);
+    return <button key={p} onClick={()=>e.d?setPath(p):open(repo,p)} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] flex items-center gap-2 transition-colors">
+     <span className="flex-1 min-w-0"><span className="block text-sm truncate">{e.d?e.n:L.a}</span>{L.b&&<span className="block text-xs text-[#999] truncate">{L.b}</span>}</span>
+     {e.d&&<span className="text-[#BBB]"><Ic n="cr" s={15}/></span>}</button>})}
+   {ls&&!hits&&ls.filter(e=>terms.every(t=>e.n.includes(t))).length>n&&<button onClick={()=>setN(n+120)} className="w-full py-2 text-xs text-[#777] hover:text-[#111]">더 보기</button>}
+  </div></div>}
+
+function CaseSearch({tok,open}){
+ const [q,setQ]=useState(''),[rows,setRows]=useState(null),[err,setErr]=useState(''),[busy,setBusy]=useState(false),[prog,setProg]=useState('');
+ const sid=useRef(0);
+ const scan=async no=>{const y=parseInt(no),lt=(no.match(/\d([가-힣]+)\d/)||[])[1];const KM={다:['민사'],카:['민사'],도:['형사'],두:['일반행정','세무'],므:['가사'],느:['가사'],후:['특허']};
+  if(!(y>1950)||!KM[lt])return null;const id=++sid.current,urls=[],end=Math.min(Date.now(),Date.UTC(y+4,11,31));
+  for(let t=Date.UTC(y,0,1);t<=end;t+=864e5){const w=new Date(t).getUTCDay();if(w&&w<6){const d=new Date(t).toISOString().slice(0,10);KM[lt].forEach(k=>urls.push(`${k}/대법원/대법원_${d}_${no}.md`))}}
+  let i=0,hit=null;await Promise.all(Array.from({length:24},async()=>{while(!hit&&id===sid.current&&i<urls.length){const p=urls[i++];if(i%25===0)setProg(`날짜 대조 ${Math.round(i/urls.length*100)}%`);
+   const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/precedent-kr/main/${enc(p)}`,{method:'HEAD'}).catch(()=>null);if(r&&r.ok)hit=p}}));return id===sid.current?hit:null};
+ const run=async()=>{
+  const m=q.match(/\d{2,4}\s*[가-힣]{1,4}\s*\d+/);const no=m?m[0].replace(/\s/g,''):q.trim();if(!no)return;
+  setBusy(true);setErr('');setRows(null);setProg('');
+  try{
+   const d=q.match(/\d{4}-\d{2}-\d{2}/);
+   if(d&&m){const court=q.slice(0,d.index).trim()||'대법원',gr=court==='대법원'?'대법원':'하급심',f=`${court}_${d[0]}_${no}.md`;
+    for(const k of ['민사','형사','일반행정','세무','가사','특허','선거·특별','기타']){const p=`${k}/${gr}/${f}`;
+     const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/precedent-kr/main/${enc(p)}`,{method:'HEAD'}).catch(()=>null);
+     if(r&&r.ok){open('precedent-kr',p);setBusy(false);return}}}
+   let r=[],ae='';if(tok)try{
+   const s=x=>gh(`/search/code?q=${encodeURIComponent(`"${no}" ${x} repo:legalize-kr/precedent-kr`)}&per_page=50`,tok).then(j=>j.items).catch(e=>{if(/valid/i.test(e.message))return[];throw e});
+   const [a,b]=await Promise.all([s('in:path'),s('in:file')]);const seen={};
+   const all=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)),hit=all.filter(i=>i.path.includes(no));
+   r=(hit.length?hit:all).map(i=>i.path);r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''))}catch(e){ae=e.message}
+   if(!r.length){const p=await scan(no);if(p){open('precedent-kr',p);setBusy(false);setProg('');return}}
+   if(ae)setErr(ae);else setRows(r)
+  }catch(e){setErr(e.message)}
+  setBusy(false);setProg('')};
+ return <div className="flex flex-col min-h-0 flex-1">
+  <div className="px-4 pt-3"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
+   <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&run()} placeholder="사건번호 (예: 2022다12345)" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/>
+   {q&&<button onClick={()=>{setQ('');setRows(null);setErr('')}} className="text-[#999] hover:text-[#111]"><Ic n="x" s={14}/></button>}</div>
+   <p className="text-[11px] text-[#999] pt-1.5">법원·선고일을 함께 쓰면 바로 열립니다. 예: 대법원 2003-11-14 2000므1257</p></div>
+  <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
+   {busy&&<p className="px-2 py-3 text-xs text-[#999]">검색 중{prog&&' · '+prog}</p>}
+   {err&&<p className="px-2 py-3 text-xs text-[#8a5a44]">{err}</p>}
+   {rows&&!rows.length&&<Empty t="일치하는 판례가 없습니다"/>}
+   {!rows&&!busy&&!err&&<Empty t="사건번호로 검색하세요"/>}
+   {rows&&rows.map(p=>{const L=label('precedent-kr',p.split('/').pop(),p);return <button key={p} onClick={()=>open('precedent-kr',p)} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] transition-colors">
+    <span className="block text-sm truncate">{L.a}</span><span className="block text-xs text-[#999] truncate">{L.b} · {p.split('/')[0]}</span></button>})}
+  </div></div>}
+
+function Side({kind,D,tok,open}){
+ const srcs=kind==='p'?[{repo:'precedent-kr',root:'',l:'판례'}]:[{repo:'legalize-kr',root:'kr',l:'법령'},{repo:'admrule-kr',root:'',l:'행정규칙'}];
+ const docs=Object.values(D.docs).filter(d=>srcs.some(s=>s.repo===d.repo));
+ const [tab,setTab]=useState(kind==='l'||docs.length?'lib':'find'),[si,setSi]=useState(0),[q,setQ]=useState(''),[sel,setSel]=useState([]);
+ const tags=[...new Set(docs.flatMap(d=>d.tags))].sort();
+ const shown=docs.filter(d=>sel.every(t=>d.tags.includes(t))&&(d.title+d.meta+d.tags.join(' ')).includes(q.trim()));
+ const T=(k,l)=><button onClick={()=>setTab(k)} className={`h-10 text-sm border-b transition-colors ${tab===k?'border-[#111] text-[#111]':'border-transparent text-[#999]'}`}>{l}</button>;
+ return <div className="flex flex-col h-full">
+  <div className="flex gap-5 px-4 border-b border-[#E5E5E5]">{T('lib','서재')}{T('find','탐색')}</div>
+  {tab==='find'?<>
+   {srcs.length>1&&<div className="flex gap-1 px-4 pt-3">{srcs.map((s,i)=><button key={s.repo} onClick={()=>setSi(i)} className={`px-2.5 h-7 text-xs rounded-full border transition-colors ${si===i?'bg-[#E6EBE1] border-[#E6EBE1] text-[#111]':'border-[#E5E5E5] text-[#777]'}`}>{s.l}</button>)}</div>}
+   {kind==='p'?<CaseSearch tok={tok} open={open}/>:<Browse repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/>}</>:
+  <div className="flex flex-col min-h-0 flex-1">
+   <div className="px-4 pt-3"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="제목·태그 검색" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div></div>
+   {tags.length>0&&<div className="px-4 pt-3 flex flex-wrap gap-1.5">{tags.map(t=><button key={t} onClick={()=>setSel(s=>s.includes(t)?s.filter(x=>x!==t):[...s,t])} className={`px-2 h-6 text-xs rounded-full border transition-colors ${sel.includes(t)?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#666]'}`}>{t}</button>)}</div>}
+   <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
+    {!shown.length&&<Empty t={docs.length?'조건에 맞는 문서가 없습니다':'저장한 문서가 없습니다'}/>}
+    {shown.map(d=><button key={d.id} onClick={()=>open(d.repo,d.path)} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] transition-colors">
+     <span className="block text-sm truncate">{d.title}</span><span className="block text-xs text-[#999] truncate">{d.meta}</span>
+     {d.tags.length>0&&<span className="block text-xs text-[#7C8B74] truncate mt-0.5">{d.tags.map(t=>'#'+t).join(' ')}</span>}</button>)}
+   </div></div>}
+ </div>}
+
+function Section({s,i,isOpen,toggle,hls,tool,onSel,onDel,fs}){
+ let o=0;const out=[];
+ s.t.split('\n').forEach((ln,k)=>{const a=o,b=o+ln.length;let p=a;const kids=[];
+  hls.map((h,idx)=>[h,idx]).filter(([h])=>h[1]>a&&h[0]<b).sort((x,y)=>x[0][0]-y[0][0]).forEach(([h,idx])=>{const st=Math.max(h[0],p,a),e=Math.min(h[1],b);if(st>=e)return;
+   if(st>p)kids.push(s.t.slice(p,st));kids.push(<mark key={idx+'-'+k} data-h={idx} style={{background:COL[h[2]],cursor:tool==='x'?'pointer':'auto'}}>{s.t.slice(st,e)}</mark>);p=e});
+  if(p<b)kids.push(s.t.slice(p,b));
+  out.push(s.hd.includes(k)?<b key={k} className="font-medium">{kids}</b>:<span key={k}>{kids}</span>,'\n');o=b+1});
+ const body=<div data-b className="whitespace-pre-wrap break-words leading-[1.85] pb-6" style={{fontSize:fs}} onPointerUp={e=>onSel(i,e.currentTarget)} onClick={e=>{const m=e.target.closest('mark');if(m&&tool==='x')onDel(i,+m.dataset.h)}}>{out}</div>;
+ if(!s.h)return body;
+ return <section className="border-t border-[#E5E5E5]">
+  <button onClick={toggle} className="w-full flex items-center gap-2 py-3.5 text-left t"><span className={`text-[#999] transition-transform duration-200 ${isOpen?'rotate-90':''}`}><Ic n="cr" s={16}/></span>
+   <b className="font-medium text-[15px]">{s.h}</b>{hls.length>0&&<span className="text-xs text-[#7C8B74]">{hls.length}</span>}</button>
+  <div className={`grid transition-[grid-template-rows] duration-200 ${isOpen?'grid-rows-[1fr]':'grid-rows-[0fr]'}`}><div className="overflow-hidden min-h-0"><div className="pl-6">{body}</div></div></div></section>}
+
+function App(){
+ const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
+ const [L,setL]=useState(innerWidth>=1024),[R,setR]=useState(false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
+ const [op,setOp]=useState({}),[tool,setTool]=useState(null),[tg,setTg]=useState('');const sc=useRef();
+ useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
+ const tok=(D.token||'').replace(/[^\x21-\x7E]/g,'');
+ const open=async(repo,path)=>{setBusy(true);setErr('');if(innerWidth<1024){setL(false);setR(false)}
+  try{const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/${repo}/main/${enc(path)}`);if(!r.ok)throw Error('문서를 불러오지 못했습니다 ('+r.status+')');
+   const d=parse(await r.text(),repo,path);const keys=d.secs.filter(s=>s.h&&KEY.test(s.h));const first=d.secs.find(s=>s.h);const o={};
+   d.secs.forEach((s,i)=>{o[i]=repo!=='precedent-kr'||(keys.length?KEY.test(s.h):s===first)});
+   setOp(o);setDoc(d);sc.current&&sc.current.scrollTo(0,0)}catch(e){setErr(e.message)}setBusy(false)};
+ const rec=doc&&D.docs[doc.id];const tags=rec?rec.tags:[],hl=rec?rec.hl:{};
+ const upd=f=>setD(d=>{const r=d.docs[doc.id]||{id:doc.id,repo:doc.repo,path:doc.path,title:doc.title,meta:doc.meta,tags:[],hl:{}};return{...d,docs:{...d.docs,[doc.id]:f(r)}}});
+ const addHl=(i,h)=>upd(r=>({...r,hl:{...r.hl,[i]:[...(r.hl[i]||[]),h]}}));
+ const delHl=(i,k)=>upd(r=>({...r,hl:{...r.hl,[i]:r.hl[i].filter((_,x)=>x!==k)}}));
+ const onSel=(i,box)=>setTimeout(()=>{if(!tool||tool==='x')return;const s=getSelection();if(!s.rangeCount||s.isCollapsed)return;const r=s.getRangeAt(0);
+  if(!box.contains(r.startContainer)||!box.contains(r.endContainer))return;const pre=document.createRange();pre.selectNodeContents(box);pre.setEnd(r.startContainer,r.startOffset);
+  const a=pre.toString().length;addHl(i,[a,a+r.toString().length,tool]);s.removeAllRanges()},30);
+ const pick=c=>{setTool(t=>t===c?null:c);const s=getSelection();if(c!=='x'&&s&&!s.isCollapsed){const n=s.anchorNode&&(s.anchorNode.nodeType===3?s.anchorNode.parentElement:s.anchorNode).closest('[data-b]');if(n){const i=[...document.querySelectorAll('[data-b]')].indexOf(n);const idx=doc.secs.map((x,k)=>k);const r=s.getRangeAt(0);if(n.contains(r.endContainer)){const pre=document.createRange();pre.selectNodeContents(n);pre.setEnd(r.startContainer,r.startOffset);const a=pre.toString().length;addHl(idx[i],[a,a+r.toString().length,c]);s.removeAllRanges()}}}};
+ const addTag=()=>{const t=tg.trim().replace(/^#/,'');if(t&&!tags.includes(t))upd(r=>({...r,tags:[...r.tags,t]}));setTg('')};
+ const allTags=[...new Set(Object.values(D.docs).flatMap(d=>d.tags))];
+ const setAll=v=>setOp(Object.fromEntries(doc.secs.map((_,i)=>[i,v])));
+ const setKey=()=>{const o={};doc.secs.forEach((s,i)=>o[i]=doc.repo!=='precedent-kr'||KEY.test(s.h))};
+ const toggleSave=()=>{if(rec){if((rec.tags.length||Object.values(rec.hl).some(a=>a.length))&&!confirm('태그와 하이라이트도 함께 삭제됩니다.'))return;setD(d=>{const x={...d.docs};delete x[doc.id];return{...d,docs:x}})}else upd(r=>r)};
+ const Bt=({on,children,...p})=><button {...p} className={`h-9 min-w-9 px-2 flex items-center justify-center rounded-md transition-colors hover:bg-[#F0F0EE] ${on?'bg-[#E6EBE1]':''} ${p.className||''}`}>{children}</button>;
+ const drawer=(side,on,kind)=><><div onClick={()=>side==='l'?setL(false):setR(false)} className={`lg:hidden fixed inset-0 bg-black/20 z-20 transition-opacity ${on?'opacity-100':'opacity-0 pointer-events-none'}`}/>
+  <aside className={`fixed top-0 bottom-0 z-30 w-[88vw] max-w-80 lg:w-80 bg-white transition-transform duration-200 ${side==='l'?'left-0 border-r':'right-0 border-r-0 border-l'} border-[#E5E5E5] ${on?'translate-x-0':side==='l'?'-translate-x-full':'translate-x-full'}`}>
+   <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex justify-end px-2 pt-1 lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></div><Side kind={kind} D={D} tok={tok} open={open}/></div></aside></>;
+ return <div className="h-full">
+  {drawer('l',L,'p')}{drawer('r',R,'l')}
+  <div className={`h-full flex flex-col transition-[margin] duration-200 ${L?'lg:ml-80':''} ${R?'lg:mr-80':''}`}>
+   <header className="flex items-center gap-1 px-2 h-12 border-b border-[#E5E5E5] shrink-0 pt-[env(safe-area-inset-top)] box-content">
+    <Bt on={L} onClick={()=>setL(!L)} title="판례"><Ic n="pl"/></Bt>
+    <div className="flex-1 min-w-0 px-2 text-center">{doc&&<><div className="text-sm truncate t font-normal">{doc.title}</div><div className="text-[11px] text-[#999] truncate">{doc.meta}</div></>}</div>
+    {doc&&<><Bt on={!!rec} onClick={toggleSave} title="서재에 저장"><Ic n="bm" s={17}/></Bt>{doc.src&&<a href={doc.src} target="_blank" rel="noreferrer" title="원문"><Bt><Ic n="ext" s={17}/></Bt></a>}</>}
+    <Bt onClick={()=>{const t=prompt('GitHub 토큰(선택) — 요청 한도 확대·본문 검색용. 이 브라우저에만 저장됩니다.',tok);if(t!==null)setD(d=>({...d,token:t.trim()}))}} title="토큰" on={!!tok}><Ic n="key" s={17}/></Bt>
+    <Bt on={R} onClick={()=>setR(!R)} title="법령·규칙"><Ic n="pr"/></Bt>
+   </header>
+   <main ref={sc} className="sb flex-1 overflow-y-auto">
+    <div className="max-w-2xl mx-auto px-5 py-6">
+     {busy&&<p className="py-20 text-center text-xs text-[#999]">불러오는 중</p>}
+     {err&&!busy&&<p className="py-20 text-center text-xs text-[#8a5a44]">{err}</p>}
+     {!doc&&!busy&&!err&&<div className="py-24"><Empty t="문서를 선택하세요"/></div>}
+     {doc&&!busy&&<article key={doc.id}>
+      <h1 className="t text-2xl font-normal leading-snug mb-6" style={{letterSpacing:'-.03em'}}>{doc.title}</h1>
+      {doc.secs.map((s,i)=><Section key={i} s={s} i={i} isOpen={!!op[i]} toggle={()=>setOp(o=>({...o,[i]:!o[i]}))} hls={hl[i]||[]} tool={tool} onSel={onSel} onDel={delHl} fs={D.fs}/>)}
+      <div className="border-t border-[#E5E5E5]"/>
+     </article>}
+    </div>
+   </main>
+   {doc&&!busy&&<footer className="border-t border-[#E5E5E5] shrink-0 pb-[env(safe-area-inset-bottom)]">
+    <div className="max-w-2xl mx-auto px-3 pt-2 flex items-center gap-1.5 flex-wrap">
+     <span className="text-[#999] px-1"><Ic n="tag" s={15}/></span>
+     {tags.map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1]">{t}<button onClick={()=>upd(r=>({...r,tags:r.tags.filter(x=>x!==t)}))} className="text-[#777] hover:text-[#111]"><Ic n="x" s={12}/></button></span>)}
+     <input list="tl" value={tg} onChange={e=>setTg(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()} onBlur={addTag} placeholder="태그 추가" className="flex-1 min-w-24 h-7 text-sm outline-none bg-transparent"/>
+     <datalist id="tl">{allTags.map(t=><option key={t} value={t}/>)}</datalist>
+    </div>
+    <div className="max-w-2xl mx-auto px-2 py-1 flex items-center gap-0.5">
+     {Object.entries(COL).map(([c,v])=><Bt key={c} on={tool===c} onMouseDown={e=>e.preventDefault()} onClick={()=>pick(c)} title="하이라이트"><span className="w-4 h-4 rounded-full border border-[#D5D5D0]" style={{background:v}}/></Bt>)}
+     <Bt on={tool==='x'} onMouseDown={e=>e.preventDefault()} onClick={()=>pick('x')} title="하이라이트 지우기"><Ic n="er" s={17}/></Bt>
+     <div className="flex-1"/>
+     <Bt onClick={()=>setD(d=>({...d,fs:Math.max(13,d.fs-1)}))} title="글자 작게"><span className="text-xs">가</span></Bt>
+     <Bt onClick={()=>setD(d=>({...d,fs:Math.min(24,d.fs+1)}))} title="글자 크게"><span className="text-base">가</span></Bt>
+     <Bt onClick={()=>setAll(true)} title="모두 펼치기"><Ic n="ud" s={17}/></Bt>
+     <Bt onClick={()=>setAll(false)} title="모두 접기"><Ic n="du" s={17}/></Bt>
+    </div>
+   </footer>}
+  </div>
+ </div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
