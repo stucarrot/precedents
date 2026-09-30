@@ -2,15 +2,15 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
 <title>판례·법령 뷰어</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
 <style>
-html,body{margin:0;height:100%}#root{height:100dvh}
-body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;color:#111;background:#fff;font-weight:300}
+html,body{margin:0;height:100%;overflow-x:hidden}#root{height:100dvh}
+body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;color:#111;background:#fff;font-weight:300;word-break:keep-all;overflow-wrap:break-word}
 b,.t{letter-spacing:-.02em}mark{color:inherit;border-radius:2px}::selection{background:#E6EBE1}
 button,input{font:inherit;letter-spacing:inherit}button{cursor:pointer}
 .sb::-webkit-scrollbar{width:6px}.sb::-webkit-scrollbar-thumb{background:#E5E5E5;border-radius:3px}
@@ -355,7 +355,7 @@ function App(){
  const setAll=v=>setOp(Object.fromEntries(doc.secs.map((_,i)=>[i,v])));
  const setKey=()=>{const o={};doc.secs.forEach((s,i)=>o[i]=doc.repo!=='precedent-kr'||KEY.test(s.h))};
  const toggleSave=()=>{if(rec){if((rec.tags.length||Object.values(rec.hl).some(a=>a.length))&&!confirm('태그와 하이라이트도 함께 삭제되고 리스트에서도 빠집니다.'))return;setD(d=>rm(d,[doc.id]))}else upd(r=>r)};
- const Bt=({on,children,...p})=><button {...p} className={`h-9 min-w-9 px-2 flex items-center justify-center rounded-md transition-colors hover:bg-[#F0F0EE] ${on?'bg-[#E6EBE1]':''} ${p.className||''}`}>{children}</button>;
+ const Bt=({on,children,...p})=><button {...p} className={`h-9 min-w-8 sm:min-w-9 px-1.5 sm:px-2 flex items-center justify-center rounded-md transition-colors hover:bg-[#F0F0EE] ${on?'bg-[#E6EBE1]':''} ${p.className||''}`}>{children}</button>;
  const drawer=(side,on,kind)=><><div onClick={()=>side==='l'?setL(false):setR(false)} className={`lg:hidden fixed inset-0 bg-black/20 z-20 transition-opacity ${on?'opacity-100':'opacity-0 pointer-events-none'}`}/>
   <aside className={`fixed top-0 bottom-0 z-30 w-[88vw] max-w-80 lg:w-80 bg-white transition-transform duration-200 ${side==='l'?'left-0 border-r':'right-0 border-r-0 border-l'} border-[#E5E5E5] ${on?'translate-x-0':side==='l'?'-translate-x-full':'translate-x-full'}`}>
    <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex justify-end px-2 pt-1 lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open}/></div></aside></>;
@@ -383,8 +383,8 @@ function App(){
     <Bt onClick={()=>{const t=prompt('GitHub 토큰(선택) — 요청 한도 확대·본문 검색용. 이 브라우저에만 저장됩니다.',tok);if(t!==null)setD(d=>({...d,token:t.trim()}))}} title="토큰" on={!!tok}><Ic n="key" s={17}/></Bt>
     <Bt on={R} onClick={()=>setR(!R)} title="법령·규칙"><Ic n="pr"/></Bt>
    </header>
-   <main ref={sc} onScroll={onScroll} className="sb flex-1 overflow-y-auto">
-    <div className="max-w-3xl mx-auto px-3 sm:px-4 py-6">
+   <main ref={sc} onScroll={onScroll} className="sb flex-1 overflow-y-auto overflow-x-hidden">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
      {busy&&<p className="py-20 text-center text-xs text-[#999]">불러오는 중</p>}
      {err&&!busy&&<p className="py-20 text-center text-xs text-[#8a5a44]">{err}</p>}
      {!doc&&!busy&&!err&&<div className="py-24"><Empty t="문서를 선택하세요"/></div>}
@@ -396,13 +396,13 @@ function App(){
     </div>
    </main>
    {doc&&!busy&&<footer className="border-t border-[#E5E5E5] shrink-0 pb-[env(safe-area-inset-bottom)]">
-    <div className="max-w-3xl mx-auto px-3 pt-2 flex items-center gap-1.5 flex-wrap">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-2 flex items-center gap-1.5 flex-wrap">
      <span className="text-[#999] px-1"><Ic n="tag" s={15}/></span>
      {tags.map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1]">{t}<button onClick={()=>upd(r=>({...r,tags:r.tags.filter(x=>x!==t)}))} className="text-[#777] hover:text-[#111]"><Ic n="x" s={12}/></button></span>)}
      <input list="tl" value={tg} onChange={e=>setTg(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()} onBlur={addTag} placeholder="태그 추가" className="flex-1 min-w-24 h-7 text-sm outline-none bg-transparent"/>
      <datalist id="tl">{allTags.map(t=><option key={t} value={t}/>)}</datalist>
     </div>
-    <div className="max-w-3xl mx-auto px-2 py-1 flex items-center gap-0.5">
+    <div className="max-w-3xl mx-auto px-2 py-1 flex items-center gap-0.5 flex-wrap">
      {Object.entries(COL).map(([c,v])=><Bt key={c} on={tool===c} onMouseDown={e=>e.preventDefault()} onClick={()=>pick(c)} title="하이라이트"><span className="w-4 h-4 rounded-full border border-[#D5D5D0]" style={{background:v}}/></Bt>)}
      <Bt on={tool==='x'} onMouseDown={e=>e.preventDefault()} onClick={()=>pick('x')} title="하이라이트 지우기"><Ic n="er" s={17}/></Bt>
      <Bt on={inAny} onClick={()=>setLm(true)} title="리스트에 담기"><Ic n="ls" s={17}/></Bt>
