@@ -161,8 +161,10 @@ function Modal({title,onClose,children}){return <div className="fixed inset-0 z-
   <div className="flex items-center px-4 h-12 border-b border-[#E5E5E5] shrink-0"><b className="flex-1 min-w-0 truncate font-medium text-sm t">{title}</b><button onClick={onClose} className="text-[#777] hover:text-[#111]"><Ic n="x"/></button></div>
   <div className="sb overflow-y-auto px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">{children}</div></div></div>}
 
+const TAGC=[['#DDE6D3','#4A5A40'],['#EFE5CF','#6B5A33'],['#E4DCD6','#6A5548'],['#D9E3EA','#3E5566'],['#E9DAE0','#6B4757'],['#E0DCEB','#54496E'],['#D6E8E4','#3A5F58'],['#EBDDD0','#7A4E32']];
+const TagChip=({t})=>{let h=0;for(const ch of t)h=(h*31+ch.charCodeAt(0))>>>0;const [bg,fg]=TAGC[h%TAGC.length];return <span className="inline-flex items-center h-5 px-2 text-[11px] rounded-full whitespace-nowrap" style={{background:bg,color:fg}}>{t}</span>};
 function Row({a,b,c,onClick,left,right}){return <button onClick={onClick} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] flex items-center gap-2.5 transition-colors">{left}
- <span className="flex-1 min-w-0"><span className="block text-sm truncate">{a}</span>{b&&<span className="block text-xs text-[#999] truncate">{b}</span>}{c&&<span className="block text-xs text-[#7C8B74] truncate mt-0.5">{c}</span>}</span>{right}</button>}
+ <span className="flex-1 min-w-0"><span className="block text-sm truncate">{a}</span>{b&&<span className="block text-xs text-[#999] truncate">{b}</span>}{c&&<span className="flex flex-wrap gap-1 mt-1">{c}</span>}</span>{right}</button>}
 
 function Multi({list,D,setD,tok,onBack}){
  const [txt,setTxt]=useState(''),[busy,setBusy]=useState(false),[prog,setProg]=useState(''),[res,setRes]=useState(null);
@@ -245,7 +247,7 @@ function Library({kind,srcs,D,setD,tok,open}){
   {tags.length>0&&<div className="px-4 pt-3 flex flex-wrap gap-1.5">{tags.map(t=><button key={t} onClick={()=>setSel(s=>s.includes(t)?s.filter(x=>x!==t):[...s,t])} className={`px-2 h-6 text-xs rounded-full border transition-colors ${sel.includes(t)?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#666]'}`}>{t}</button>)}</div>}
   <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
    {!shown.length&&<Empty t={base.length?'조건에 맞는 문서가 없습니다':'비어 있습니다'}/>}
-   {shown.map(d=><Row key={d.id} onClick={()=>chk?toggle(d.id):open(d.repo,d.path)} a={d.title} b={d.meta} c={d.tags.length>0&&d.tags.map(t=>'#'+t).join(' ')}
+   {shown.map(d=><Row key={d.id} onClick={()=>chk?toggle(d.id):open(d.repo,d.path)} a={d.title} b={d.meta} c={d.tags.length>0&&d.tags.map(t=><TagChip key={t} t={t}/>)}
     left={chk&&<span className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center ${ck.includes(d.id)?'bg-[#111] border-[#111] text-white':'border-[#CCC]'}`}>{ck.includes(d.id)&&<Ic n="ck" s={11}/>}</span>}/>)}
   </div>
   {chk&&<div className="border-t border-[#E5E5E5] px-3 py-2 pb-[max(.5rem,env(safe-area-inset-bottom))]">
