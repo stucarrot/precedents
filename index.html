@@ -109,17 +109,15 @@ function CaseSearch({tok,open}){
     const hint=/^(다|마|카|라|아|자|차)/.test(kw)?'민사':/^(도|모|오|초|노|고|재)/.test(kw)?'형사':/^(두|누|구|아)/.test(kw)?'일반행정':/^(므|스|드|르|느)/.test(kw)?'가사':/^(후|허|hu)/.test(kw)?'특허':'';
     const order=[...(hint?[hint]:[]),...CAT.filter(c=>c!==hint)],found=[];
     for(const k of order){for(const g of ['대법원','하급심']){
-      try{const ls=await list('precedent-kr',`${k}/${g}`,'');ls.forEach(e=>{if(!e.d&&e.n.endsWith('_'+no+'.md'))found.push(`${k}/${g}/${e.n}`)})}catch(e){if(/rate limit/i.test(e.message))throw Error('GitHub 무료 요청 한도(시간당 60회)를 초과했습니다. 잠시 후 다시 시도하거나 토큰을 사용하세요.')}}
+      try{const P=`${k}/${g}`,ls=await list('precedent-kr',P,tok).catch(e=>{if(e.net&&tok)return list('precedent-kr',P,'');throw e});ls.forEach(e=>{if(!e.d&&e.n.endsWith('_'+no+'.md'))found.push(`${k}/${g}/${e.n}`)})}catch(e){if(/rate limit/i.test(e.message))throw Error('GitHub 무료 요청 한도(시간당 60회)를 초과했습니다. 잠시 후 다시 시도하거나 토큰을 사용하세요.')}}
      if(found.length)break}
     return found};
-   let r=null,note='';
-   if(tok){try{
+   let r=await byName(),note='';
+   if(!r.length&&tok){try{
     const s=x=>gh(`/search/code?q=${encodeURIComponent(`"${no}" ${x} repo:legalize-kr/precedent-kr`)}&per_page=50`,tok).then(j=>j.items).catch(e=>{if(/valid/i.test(e.message))return[];throw e});
     const a=await s('in:path'),b=await s('in:file');const seen={};
-    const all=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)),hit=all.filter(i=>i.path.includes(no));
-    r=(hit.length?hit:all).map(i=>i.path)}catch(e){if(!e.net)throw e;note=e.message+' → 토큰 없이 파일명 검색으로 대신했습니다.'}}
-   if(!r)r=await byName();
-   r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r);if(note)setErr(note)
+    r=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)).map(i=>i.path)}catch(e){if(!e.net)throw e;note='파일명으로는 찾지 못했고, 본문 검색(GitHub 코드검색)은 연결이 끊겨 실행하지 못했습니다.'}}
+   r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r);if(note&&!r.length)setErr(note)
   }catch(e){setErr(e.message)}
   setBusy(false)};
  return <div className="flex flex-col min-h-0 flex-1">
