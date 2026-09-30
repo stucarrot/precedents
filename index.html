@@ -35,7 +35,7 @@ const Ic=({n,s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" s
 const COL={a:'#DDE6D3',b:'#EFE5CF',c:'#E4DCD6'};
 const enc=p=>p.split('/').map(encodeURIComponent).join('/');
 const cache={};
-const gh=async(u,tok)=>{const r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}}).catch(()=>{throw Error('GitHub에 연결하지 못했습니다. 토큰이 올바른지(공백·줄바꿈 없이), 네트워크가 정상인지 확인하세요.')});const j=await r.json();if(!r.ok)throw Error(j.message||r.status);return j};
+const gh=async(u,tok)=>{const r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}}).catch(x=>{throw Error('GitHub 요청 실패('+x.message+'). 토큰에 공백·한글·줄바꿈이 섞였거나, 광고/보안 차단 확장 프로그램이 api.github.com을 막고 있을 수 있습니다.')});const j=await r.json();if(!r.ok)throw Error(j.message||r.status);return j};
 const list=async(repo,path,tok)=>{const k=repo+'/'+path;if(cache[k])return cache[k];
  const j=await gh(`/repos/legalize-kr/${repo}/git/trees/main${path?':'+enc(path):''}`,tok);
  const r=j.tree.map(t=>({n:t.path,d:t.type==='tree'})).filter(t=>t.d||t.n.endsWith('.md')&&t.n!=='README.md');
@@ -165,7 +165,7 @@ function App(){
  const [L,setL]=useState(innerWidth>=1024),[R,setR]=useState(false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [op,setOp]=useState({}),[tool,setTool]=useState(null),[tg,setTg]=useState('');const sc=useRef();
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
- const tok=D.token||'';
+ const tok=(D.token||'').replace(/[^\x21-\x7E]/g,'');
  const open=async(repo,path)=>{setBusy(true);setErr('');if(innerWidth<1024){setL(false);setR(false)}
   try{const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/${repo}/main/${enc(path)}`);if(!r.ok)throw Error('문서를 불러오지 못했습니다 ('+r.status+')');
    const d=parse(await r.text(),repo,path);const keys=d.secs.filter(s=>s.h&&KEY.test(s.h));const first=d.secs.find(s=>s.h);const o={};
