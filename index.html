@@ -35,7 +35,12 @@ const Ic=({n,s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" s
 const COL={a:'#DDE6D3',b:'#EFE5CF',c:'#E4DCD6'};
 const enc=p=>p.split('/').map(encodeURIComponent).join('/');
 const cache={};
-const gh=async(u,tok)=>{const r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}}).catch(x=>{throw Error('GitHub 요청 실패('+x.message+'). 토큰에 공백·한글·줄바꿈이 섞였거나, 광고/보안 차단 확장 프로그램이 api.github.com을 막고 있을 수 있습니다.')});const j=await r.json();if(!r.ok)throw Error(j.message||r.status);return j};
+const diagnose=async hadTok=>{
+ const open=await fetch('https://api.github.com/zen').then(()=>true,()=>false);
+ if(!open)return 'api.github.com 자체에 연결할 수 없습니다. ① 이 앱을 CSP가 걸린 곳(Claude 게시 페이지·샌드박스 iframe 등)에서 열었거나 ② 광고/보안 확장 프로그램·사내 방화벽·VPN이 차단 중입니다. F12 콘솔에 "Content Security Policy" 오류가 있으면 ①입니다 → GitHub Pages/Netlify 등에 올리거나 로컬에서 여세요.';
+ if(hadTok)return '토큰 없는 요청은 되는데 토큰(Authorization 헤더) 요청만 막혔습니다. 이 헤더는 브라우저가 사전요청(OPTIONS)을 먼저 보내는데 확장 프로그램·프록시·보안 SW가 이를 차단할 때 생깁니다. 시크릿 창(확장 끔)이나 다른 네트워크(핫스팟)로 시도해 보세요.';
+ return '네트워크 오류로 GitHub에 연결하지 못했습니다.'};
+const gh=async(u,tok)=>{let r;try{r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}})}catch(x){throw Error(await diagnose(!!tok))}const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(r.status===401?'토큰이 올바르지 않거나 만료되었습니다 (401).':r.status===403?(j.message||'요청 한도 초과 — 잠시 후 다시 시도하세요 (403).'):(j.message||r.status));return j};
 const list=async(repo,path,tok)=>{const k=repo+'/'+path;if(cache[k])return cache[k];
  const j=await gh(`/repos/legalize-kr/${repo}/git/trees/main${path?':'+enc(path):''}`,tok);
  const r=j.tree.map(t=>({n:t.path,d:t.type==='tree'})).filter(t=>t.d||t.n.endsWith('.md')&&t.n!=='README.md');
@@ -103,7 +108,7 @@ function CaseSearch({tok,open}){
      if(r&&r.ok){open('precedent-kr',p);setBusy(false);return}}}
    if(!tok)throw Error('사건번호 검색에는 GitHub 토큰이 필요합니다. 우측 상단 열쇠 아이콘에서 입력하세요. (법원·선고일을 함께 쓰면 토큰 없이 바로 열립니다)');
    const s=x=>gh(`/search/code?q=${encodeURIComponent(`"${no}" ${x} repo:legalize-kr/precedent-kr`)}&per_page=50`,tok).then(j=>j.items).catch(e=>{if(/valid/i.test(e.message))return[];throw e});
-   const [a,b]=await Promise.all([s('in:path'),s('in:file')]);const seen={};
+   const a=await s('in:path'),b=await s('in:file');const seen={};
    const all=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)),hit=all.filter(i=>i.path.includes(no));
    const r=(hit.length?hit:all).map(i=>i.path);r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r)
   }catch(e){setErr(e.message)}
@@ -165,7 +170,7 @@ function App(){
  const [L,setL]=useState(innerWidth>=1024),[R,setR]=useState(false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [op,setOp]=useState({}),[tool,setTool]=useState(null),[tg,setTg]=useState('');const sc=useRef();
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
- const tok=(D.token||'').replace(/[^\x21-\x7E]/g,'');
+ const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
  const open=async(repo,path)=>{setBusy(true);setErr('');if(innerWidth<1024){setL(false);setR(false)}
   try{const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/${repo}/main/${enc(path)}`);if(!r.ok)throw Error('문서를 불러오지 못했습니다 ('+r.status+')');
    const d=parse(await r.text(),repo,path);const keys=d.secs.filter(s=>s.h&&KEY.test(s.h));const first=d.secs.find(s=>s.h);const o={};
