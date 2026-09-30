@@ -155,11 +155,11 @@ function Modal({title,onClose,children}){return <div className="fixed inset-0 z-
 function Row({a,b,c,onClick,left,right}){return <button onClick={onClick} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] flex items-center gap-2.5 transition-colors">{left}
  <span className="flex-1 min-w-0"><span className="block text-sm truncate">{a}</span>{b&&<span className="block text-xs text-[#999] truncate">{b}</span>}{c&&<span className="block text-xs text-[#7C8B74] truncate mt-0.5">{c}</span>}</span>{right}</button>}
 
-function Multi({kind,D,setD,tok,onBack,onDone}){
- const [name,setName]=useState(''),[txt,setTxt]=useState(''),[busy,setBusy]=useState(false),[prog,setProg]=useState(''),[res,setRes]=useState(null),[lid,setLid]=useState(null);
+function Multi({list,D,setD,tok,onBack}){
+ const [txt,setTxt]=useState(''),[busy,setBusy]=useState(false),[prog,setProg]=useState(''),[res,setRes]=useState(null);
  const run=async()=>{
-  const lines=txt.split('\n').map(s=>s.trim()).filter(Boolean),nm=name.trim();if(!nm||!lines.length)return;
-  setBusy(true);setRes(null);const out=[],recs=[],ids=[];
+  const lines=txt.split('\n').map(s=>s.trim()).filter(Boolean);if(!lines.length)return;
+  setBusy(true);setRes(null);const out=[],recs=[],have=new Set(list.ids),added=[];
   for(let i=0;i<lines.length;i++){
    setProg(`${i+1} / ${lines.length}`);const ln=lines[i],m=ln.match(CASE);
    if(!m){out.push({ln,st:'사건번호 형식이 아님',ok:0});continue}
@@ -169,57 +169,58 @@ function Multi({kind,D,setD,tok,onBack,onDone}){
    if(!r.length){out.push({ln,st:'검색 결과 없음',ok:0});continue}
    let pk=r,st='추가됨';
    if(r.length>1){pk=r.filter(isSup);if(!pk.length){out.push({ln,st:`${r.length}건 검색됨 · 대법원 판결이 없어 제외`,ok:0});continue}st=`${r.length}건 중 대법원 ${pk.length}건만 추가`}
-   for(const p of pk){let rec;try{const d=await fetchDoc('precedent-kr',p);rec={id:d.id,repo:d.repo,path:p,title:d.title,meta:d.meta,tags:[],hl:{}}}
-    catch{const L=label('precedent-kr',p.split('/').pop(),p);rec={id:'precedent-kr:'+p,repo:'precedent-kr',path:p,title:L.a,meta:L.b,tags:[],hl:{}}}
-    recs.push(rec);ids.push(rec.id)}
-   out.push({ln,st,ok:1});
+   let n=0,dup=0;
+   for(const p of pk){const id='precedent-kr:'+p;if(have.has(id)){dup++;continue}
+    let rec;try{const d=await fetchDoc('precedent-kr',p);rec={id:d.id,repo:d.repo,path:p,title:d.title,meta:d.meta,tags:[],hl:{}}}
+    catch{const L=label('precedent-kr',p.split('/').pop(),p);rec={id,repo:'precedent-kr',path:p,title:L.a,meta:L.b,tags:[],hl:{}}}
+    recs.push(rec);have.add(id);added.push(id);n++}
+   out.push(n?{ln,st:st+(dup?` · ${dup}건 중복 제외`:''),ok:1}:{ln,st:'이미 리스트에 있음',ok:2});
   }
-  const ex=(D.lists||[]).find(l=>l.kind===kind&&l.name===nm),id0=ex?ex.id:uid();
-  setD(d=>{const docs={...d.docs};recs.forEach(r=>{if(!docs[r.id])docs[r.id]=r});const ls=d.lists||[],e=ls.find(l=>l.id===id0);
-   return{...d,docs,lists:e?ls.map(l=>l.id===id0?{...l,ids:[...new Set([...l.ids,...ids])]}:l):[...ls,{id:id0,name:nm,kind,ids:[...new Set(ids)]}]}});
-  setLid(id0);setRes(out);setBusy(false);setProg('')};
+  setD(d=>{const docs={...d.docs};recs.forEach(r=>{if(!docs[r.id])docs[r.id]=r});
+   return{...d,docs,lists:(d.lists||[]).map(l=>l.id===list.id?{...l,ids:[...new Set([...l.ids,...added])]}:l)}});
+  setRes(out);setBusy(false);setProg('')};
  const inp="w-full border border-[#E5E5E5] rounded-md px-2.5 text-sm outline-none focus:border-[#111] transition-colors bg-transparent";
  return <div className="sb flex-1 overflow-y-auto px-4 pt-3 pb-6">
-  <div className="flex items-center gap-1 mb-3"><button onClick={onBack} className="text-[#777] hover:text-[#111] -ml-1 h-8 w-7 flex items-center"><Ic n="cl" s={16}/></button><b className="text-sm font-medium t">다중입력으로 리스트 만들기</b></div>
+  <div className="flex items-center gap-1 mb-3"><button onClick={onBack} className="text-[#777] hover:text-[#111] -ml-1 h-8 w-7 flex items-center"><Ic n="cl" s={16}/></button><b className="flex-1 min-w-0 truncate text-sm font-medium t">다중추가 · {list.name}</b></div>
   {!res?<>
-   <label className="block text-xs text-[#777] mb-1">리스트 제목</label>
-   <input value={name} onChange={e=>setName(e.target.value)} placeholder="예: 상속 관련 판례" className={inp+" h-9 mb-3"}/>
    <label className="block text-xs text-[#777] mb-1">사건번호 (한 줄에 하나)</label>
-   <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={8} placeholder={"2022다12345\n2000므1257\n2019두54321"} className={inp+" py-2 leading-relaxed resize-y"}/>
-   <p className="text-[11px] text-[#999] mt-1.5 mb-3 leading-relaxed">결과가 1건이면 그대로 추가하고, 2건 이상이면 대법원 판결만 추가합니다. 같은 제목의 리스트가 이미 있으면 이어서 추가합니다.</p>
-   <button onClick={run} disabled={busy||!name.trim()||!txt.trim()} className="w-full h-10 rounded-md bg-[#111] text-white text-sm disabled:opacity-30 transition-opacity">{busy?`검색 중 ${prog}`:'검색해서 리스트 만들기'}</button>
+   <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={9} placeholder={"2022다12345\n2000므1257\n2019두54321"} className={inp+" py-2 leading-relaxed resize-y"}/>
+   <p className="text-[11px] text-[#999] mt-1.5 mb-3 leading-relaxed">결과가 1건이면 그대로 추가하고, 2건 이상이면 대법원 판결만 추가합니다. 이미 이 리스트에 있는 판례는 건너뜁니다.</p>
+   <button onClick={run} disabled={busy||!txt.trim()} className="w-full h-10 rounded-md bg-[#111] text-white text-sm disabled:opacity-30 transition-opacity">{busy?`검색 중 ${prog}`:'검색해서 추가'}</button>
   </>:<>
-   <p className="text-sm mb-1">{res.filter(r=>r.ok).length}건 처리 완료 <span className="text-xs text-[#999]">/ 입력 {res.length}줄</span></p>
-   <div className="mb-3">{res.map((r,i)=><div key={i} className="flex gap-2 py-1.5 border-t border-[#EEE] text-xs"><span className={r.ok?'text-[#7C8B74]':'text-[#8a5a44]'}>{r.ok?'✓':'✗'}</span><span className="flex-1 min-w-0 break-words">{r.ln}</span><span className="text-[#999] text-right max-w-[45%]">{r.st}</span></div>)}</div>
-   <div className="flex gap-2"><button onClick={()=>onDone(lid)} className="flex-1 h-10 rounded-md bg-[#111] text-white text-sm">리스트 열기</button><button onClick={()=>{setRes(null);setTxt(res.filter(r=>!r.ok).map(r=>r.ln).join('\n'))}} className="h-10 px-4 rounded-md border border-[#E5E5E5] text-sm text-[#555]">실패분 다시</button></div>
+   <p className="text-sm mb-1">{res.filter(r=>r.ok===1).length}줄 추가{res.some(r=>r.ok===2)&&<span className="text-xs text-[#999]"> · {res.filter(r=>r.ok===2).length}줄은 이미 있어 제외</span>} <span className="text-xs text-[#999]">/ 입력 {res.length}줄</span></p>
+   <div className="mb-3">{res.map((r,i)=><div key={i} className="flex gap-2 py-1.5 border-t border-[#EEE] text-xs"><span className={r.ok===1?'text-[#7C8B74]':r.ok===2?'text-[#999]':'text-[#8a5a44]'}>{r.ok===1?'✓':r.ok===2?'＝':'✗'}</span><span className="flex-1 min-w-0 break-words">{r.ln}</span><span className="text-[#999] text-right max-w-[45%]">{r.st}</span></div>)}</div>
+   <div className="flex gap-2"><button onClick={onBack} className="flex-1 h-10 rounded-md bg-[#111] text-white text-sm">리스트로 돌아가기</button>{res.some(r=>!r.ok)&&<button onClick={()=>{setRes(null);setTxt(res.filter(r=>!r.ok).map(r=>r.ln).join('\n'))}} className="h-10 px-4 rounded-md border border-[#E5E5E5] text-sm text-[#555]">실패분 다시</button>}</div>
   </>}
  </div>}
 
 function Library({kind,srcs,D,setD,tok,open}){
- const [v,setV]=usePS('lib:'+kind+':v',null),[q,setQ]=usePS('lib:'+kind+':q',''),[sel,setSel]=usePS('lib:'+kind+':sel',[]),[chk,setChk]=useState(null),[te,setTe]=useState(false),[tn,setTn]=useState(''),[mu,setMu]=useState(false);
+ const [v,setV]=usePS('lib:'+kind+':v',null),[q,setQ]=usePS('lib:'+kind+':q',''),[sel,setSel]=usePS('lib:'+kind+':sel',[]),[chk,setChk]=useState(null),[te,setTe]=useState(false),[tn,setTn]=useState(''),[mu,setMu]=useState(false),[note,setNote]=useState('');
  const lists=(D.lists||[]).filter(l=>l.kind===kind),all=Object.values(D.docs).filter(d=>srcs.some(s=>s.repo===d.repo)),cur=lists.find(l=>l.id===v);
  useEffect(()=>{if(v&&v!=='all'&&!cur)setV(null)},[v,cur]);
- const go=x=>{setV(x);setQ('');setSel([]);setChk(null);setTe(false);setMu(false)};
+ const go=x=>{setNote('');setV(x);setQ('');setSel([]);setChk(null);setTe(false);setMu(false)};
  const newList=()=>{const n=(prompt('새 리스트 이름')||'').trim();if(n)setD(d=>({...d,lists:[...(d.lists||[]),{id:uid(),name:n,kind,ids:[]}]}))};
- if(mu)return <Multi kind={kind} D={D} setD={setD} tok={tok} onBack={()=>setMu(false)} onDone={go}/>;
+ if(mu&&cur)return <Multi list={cur} D={D} setD={setD} tok={tok} onBack={()=>setMu(false)}/>;
  if(!v)return <div className="flex flex-col min-h-0 flex-1">
   <div className="px-4 pt-3 flex items-center gap-2"><span className="flex-1 text-xs text-[#777]">리스트</span>
-   {kind==='p'&&<button onClick={()=>setMu(true)} className={SB}>다중입력</button>}<button onClick={newList} className={SB}>+ 새 리스트</button></div>
+   <button onClick={newList} className={SB}>+ 새 리스트</button></div>
   <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
    <Row onClick={()=>go('all')} a="전체 보관함" b={all.length+'건'} right={<span className="text-[#BBB]"><Ic n="cr" s={15}/></span>}/>
    {lists.map(l=><Row key={l.id} onClick={()=>go(l.id)} a={l.name} b={l.ids.filter(i=>D.docs[i]).length+'건'} right={<span className="text-[#BBB]"><Ic n="cr" s={15}/></span>}/>)}
    {!lists.length&&<p className="px-2 pt-4 text-xs text-[#999] leading-relaxed">리스트를 만들어 문서를 모아보세요. 문서를 연 뒤 하단 <span className="inline-block align-middle"><Ic n="ls" s={13}/></span> 버튼으로 담을 수 있습니다.</p>}
   </div></div>;
- const base=v==='all'?all:(cur?cur.ids.map(i=>D.docs[i]).filter(Boolean):[]);
+ const base=v==='all'?all:(cur?[...new Set(cur.ids)].map(i=>D.docs[i]).filter(Boolean):[]);
  const tags=[...new Set(base.flatMap(d=>d.tags))].sort();
  const shown=base.filter(d=>sel.every(t=>d.tags.includes(t))&&(d.title+d.meta+d.tags.join(' ')).includes(q.trim()));
  const ck=chk||[],picked=base.filter(d=>ck.includes(d.id)),cnt={};picked.forEach(d=>d.tags.forEach(t=>cnt[t]=(cnt[t]||0)+1));
- const toggle=id=>setChk(c=>c.includes(id)?c.filter(x=>x!==id):[...c,id]);
+ const toggle=id=>{setNote('');setChk(c=>c.includes(id)?c.filter(x=>x!==id):[...c,id])};
  const patch=f=>setD(d=>({...d,docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,ck.includes(k)?{...r,tags:f(r.tags)}:r]))}));
  const addT=()=>{const ts=tn.split(',').map(t=>t.trim().replace(/^#/,'')).filter(Boolean);if(ts.length&&ck.length)patch(a=>[...new Set([...a,...ts])]);setTn('')};
  const fromList=()=>{setD(d=>({...d,lists:d.lists.map(l=>l.id===v?{...l,ids:l.ids.filter(i=>!ck.includes(i))}:l)}));setChk([])};
  const delLib=()=>{if(ck.length&&confirm(`${ck.length}건을 서재에서 삭제합니다.\n태그·하이라이트가 함께 사라지고 모든 리스트에서 빠집니다.`)){setD(d=>rm(d,ck));setChk([])}};
- const toList=lid=>{if(lid&&ck.length)setD(d=>({...d,lists:d.lists.map(l=>l.id===lid?{...l,ids:[...new Set([...l.ids,...ck])]}:l)}))};
+ const xfer=(lid,move)=>{const t=(D.lists||[]).find(l=>l.id===lid);if(!t||!ck.length)return;const dup=ck.filter(i=>t.ids.includes(i)).length;
+  setD(d=>({...d,lists:d.lists.map(l=>l.id===lid?{...l,ids:[...new Set([...l.ids,...ck])]}:move&&l.id===v?{...l,ids:l.ids.filter(i=>!ck.includes(i))}:l)}));
+  setNote(`${ck.length-dup}건 ${move?'이동':'추가'}${dup?` · ${dup}건은 이미 있어 중복 제외`:''} → ${t.name}`);if(move)setChk([])};
  const ren=()=>{const n=(prompt('리스트 이름',cur.name)||'').trim();if(n)setD(d=>({...d,lists:d.lists.map(l=>l.id===v?{...l,name:n}:l)}))};
  const delList=()=>{if(confirm(`리스트 "${cur.name}"을(를) 삭제합니다. (문서는 서재에 남습니다)`)){setD(d=>({...d,lists:d.lists.filter(l=>l.id!==v)}));go(null)}};
  return <div className="flex flex-col min-h-0 flex-1">
@@ -229,8 +230,9 @@ function Library({kind,srcs,D,setD,tok,open}){
    {cur&&<><button onClick={ren} className={IB} title="이름 수정"><Ic n="pe" s={15}/></button><button onClick={delList} className={IB} title="리스트 삭제"><Ic n="tr" s={15}/></button></>}
    <button onClick={()=>{setChk(c=>c?null:[]);setTe(false)}} className={`h-8 px-2.5 text-xs rounded-md border transition-colors ${chk?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#555]'}`}>선택</button>
   </div>
-  <div className="px-4 pt-2"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
-   <input value={q} onChange={e=>setQ(e.target.value)} placeholder="제목·태그 검색" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div></div>
+  <div className="px-4 pt-2 flex items-center gap-2"><div className="flex-1 min-w-0 flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
+   <input value={q} onChange={e=>setQ(e.target.value)} placeholder="제목·태그 검색" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div>
+   {cur&&kind==='p'&&<button onClick={()=>setMu(true)} className={SB+" h-9"} title="사건번호 여러 개를 이 리스트에 한 번에 추가">다중추가</button>}</div>
   {tags.length>0&&<div className="px-4 pt-3 flex flex-wrap gap-1.5">{tags.map(t=><button key={t} onClick={()=>setSel(s=>s.includes(t)?s.filter(x=>x!==t):[...s,t])} className={`px-2 h-6 text-xs rounded-full border transition-colors ${sel.includes(t)?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#666]'}`}>{t}</button>)}</div>}
   <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
    {!shown.length&&<Empty t={base.length?'조건에 맞는 문서가 없습니다':'비어 있습니다'}/>}
@@ -242,11 +244,13 @@ function Library({kind,srcs,D,setD,tok,open}){
     <div className="flex flex-wrap gap-1.5 mb-2">{Object.keys(cnt).sort().map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1]">{t}<span className="text-[#7C8B74]">{cnt[t]}</span><button onClick={()=>patch(a=>a.filter(x=>x!==t))} className="text-[#777] hover:text-[#111]" title="선택한 문서 전체에서 제거"><Ic n="x" s={12}/></button></span>)}
      {!Object.keys(cnt).length&&<span className="text-xs text-[#999]">{ck.length?'선택한 문서에 태그가 없습니다':'문서를 선택하세요'}</span>}</div>
     <div className="flex gap-1.5"><input value={tn} onChange={e=>setTn(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addT()} placeholder="추가할 태그 (쉼표로 여러 개)" className="flex-1 min-w-0 h-8 px-2.5 text-sm border border-[#E5E5E5] rounded-md outline-none focus:border-[#111] bg-transparent"/><button onClick={addT} className={SB}>추가</button></div></div>}
+   {note&&<p className="text-xs text-[#7C8B74] mb-2">{note}</p>}
    <div className="flex items-center gap-1.5 flex-wrap">
     <span className="text-xs text-[#777] mr-1">{ck.length}건</span>
     <button onClick={()=>setChk(ck.length===shown.length?[]:shown.map(d=>d.id))} className={SB}>{ck.length===shown.length&&shown.length?'해제':'전체'}</button>
     <button onClick={()=>setTe(!te)} className={`${SB} ${te?'bg-[#E6EBE1] border-[#E6EBE1]':''}`}>태그</button>
-    {lists.filter(l=>l.id!==v).length>0&&<select value="" onChange={e=>toList(e.target.value)} className={SB+" bg-white"}><option value="">리스트에 추가</option>{lists.filter(l=>l.id!==v).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>}
+    {lists.filter(l=>l.id!==v).length>0&&<select value="" onChange={e=>xfer(e.target.value,false)} className={SB+" bg-white"}><option value="">리스트에 추가</option>{lists.filter(l=>l.id!==v).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>}
+    {cur&&lists.length>1&&<select value="" onChange={e=>xfer(e.target.value,true)} className={SB+" bg-white"}><option value="">리스트로 이동</option>{lists.filter(l=>l.id!==v).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>}
     {cur&&<button onClick={fromList} className={SB}>목록에서 제거</button>}
     <button onClick={delLib} className={SB+" !text-[#8a5a44]"}>서재에서 삭제</button>
    </div></div>}
