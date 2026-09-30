@@ -35,7 +35,7 @@ const Ic=({n,s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" s
 const COL={a:'#DDE6D3',b:'#EFE5CF',c:'#E4DCD6'};
 const enc=p=>p.split('/').map(encodeURIComponent).join('/');
 const cache={};
-const gh=async(u,tok)=>{const r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}});const j=await r.json();if(!r.ok)throw Error(j.message||r.status);return j};
+const gh=async(u,tok)=>{const r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}}).catch(()=>{throw Error('GitHub에 연결하지 못했습니다. 토큰이 올바른지(공백·줄바꿈 없이), 네트워크가 정상인지 확인하세요.')});const j=await r.json();if(!r.ok)throw Error(j.message||r.status);return j};
 const list=async(repo,path,tok)=>{const k=repo+'/'+path;if(cache[k])return cache[k];
  const j=await gh(`/repos/legalize-kr/${repo}/git/trees/main${path?':'+enc(path):''}`,tok);
  const r=j.tree.map(t=>({n:t.path,d:t.type==='tree'})).filter(t=>t.d||t.n.endsWith('.md')&&t.n!=='README.md');
@@ -90,6 +90,38 @@ function Browse({repo,root,tok,open}){
    {ls&&!hits&&ls.filter(e=>terms.every(t=>e.n.includes(t))).length>n&&<button onClick={()=>setN(n+120)} className="w-full py-2 text-xs text-[#777] hover:text-[#111]">더 보기</button>}
   </div></div>}
 
+function CaseSearch({tok,open}){
+ const [q,setQ]=useState(''),[rows,setRows]=useState(null),[err,setErr]=useState(''),[busy,setBusy]=useState(false);
+ const run=async()=>{
+  const m=q.match(/\d{2,4}\s*[가-힣]{1,4}\s*\d+/);const no=m?m[0].replace(/\s/g,''):q.trim();if(!no)return;
+  setBusy(true);setErr('');setRows(null);
+  try{
+   const d=q.match(/\d{4}-\d{2}-\d{2}/);
+   if(d&&m){const court=q.slice(0,d.index).trim()||'대법원',gr=court==='대법원'?'대법원':'하급심',f=`${court}_${d[0]}_${no}.md`;
+    for(const k of ['민사','형사','일반행정','세무','가사','특허','선거·특별','기타']){const p=`${k}/${gr}/${f}`;
+     const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/precedent-kr/main/${enc(p)}`,{method:'HEAD'}).catch(()=>null);
+     if(r&&r.ok){open('precedent-kr',p);setBusy(false);return}}}
+   if(!tok)throw Error('사건번호 검색에는 GitHub 토큰이 필요합니다. 우측 상단 열쇠 아이콘에서 입력하세요. (법원·선고일을 함께 쓰면 토큰 없이 바로 열립니다)');
+   const s=x=>gh(`/search/code?q=${encodeURIComponent(`"${no}" ${x} repo:legalize-kr/precedent-kr`)}&per_page=50`,tok).then(j=>j.items).catch(e=>{if(/valid/i.test(e.message))return[];throw e});
+   const [a,b]=await Promise.all([s('in:path'),s('in:file')]);const seen={};
+   const all=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)),hit=all.filter(i=>i.path.includes(no));
+   const r=(hit.length?hit:all).map(i=>i.path);r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r)
+  }catch(e){setErr(e.message)}
+  setBusy(false)};
+ return <div className="flex flex-col min-h-0 flex-1">
+  <div className="px-4 pt-3"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
+   <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&run()} placeholder="사건번호 (예: 2022다12345)" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/>
+   {q&&<button onClick={()=>{setQ('');setRows(null);setErr('')}} className="text-[#999] hover:text-[#111]"><Ic n="x" s={14}/></button>}</div>
+   <p className="text-[11px] text-[#999] pt-1.5">법원·선고일을 함께 쓰면 바로 열립니다. 예: 대법원 2003-11-14 2000므1257</p></div>
+  <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
+   {busy&&<p className="px-2 py-3 text-xs text-[#999]">검색 중</p>}
+   {err&&<p className="px-2 py-3 text-xs text-[#8a5a44]">{err}</p>}
+   {rows&&!rows.length&&<Empty t="일치하는 판례가 없습니다"/>}
+   {!rows&&!busy&&!err&&<Empty t="사건번호로 검색하세요"/>}
+   {rows&&rows.map(p=>{const L=label('precedent-kr',p.split('/').pop(),p);return <button key={p} onClick={()=>open('precedent-kr',p)} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] transition-colors">
+    <span className="block text-sm truncate">{L.a}</span><span className="block text-xs text-[#999] truncate">{L.b} · {p.split('/')[0]}</span></button>})}
+  </div></div>}
+
 function Side({kind,D,tok,open}){
  const srcs=kind==='p'?[{repo:'precedent-kr',root:'',l:'판례'}]:[{repo:'legalize-kr',root:'kr',l:'법령'},{repo:'admrule-kr',root:'',l:'행정규칙'}];
  const docs=Object.values(D.docs).filter(d=>srcs.some(s=>s.repo===d.repo));
@@ -101,7 +133,7 @@ function Side({kind,D,tok,open}){
   <div className="flex gap-5 px-4 border-b border-[#E5E5E5]">{T('lib','서재')}{T('find','탐색')}</div>
   {tab==='find'?<>
    {srcs.length>1&&<div className="flex gap-1 px-4 pt-3">{srcs.map((s,i)=><button key={s.repo} onClick={()=>setSi(i)} className={`px-2.5 h-7 text-xs rounded-full border transition-colors ${si===i?'bg-[#E6EBE1] border-[#E6EBE1] text-[#111]':'border-[#E5E5E5] text-[#777]'}`}>{s.l}</button>)}</div>}
-   <Browse repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/></>:
+   {kind==='p'?<CaseSearch tok={tok} open={open}/>:<Browse repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/>}</>:
   <div className="flex flex-col min-h-0 flex-1">
    <div className="px-4 pt-3"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
     <input value={q} onChange={e=>setQ(e.target.value)} placeholder="제목·태그 검색" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div></div>
