@@ -56,10 +56,26 @@ function parse(txt,repo,path){
  if(parts[0].trim())secs.push({h:'',...disp(parts[0])});
  parts.slice(1).forEach(p=>{const i=p.indexOf('\n');secs.push({h:p.slice(0,i).trim(),...disp(p.slice(i+1))})});
  const meta=(repo==='precedent-kr'?[fm.법원명,fm.선고일자,fm.사건번호]:repo==='legalize-kr'?[fm.법령구분,fm.시행일자,(fm.소관부처||'').replace(/[\[\]]/g,'')]:[fm.행정규칙종류,fm.발령일자,fm.소관부처명]).filter(Boolean).join(' · ');
- return{id:repo+':'+path,repo,path,title,meta,secs,src:fm.출처}}
+ return{id:repo+':'+path,repo,path,title,meta,secs,src:fm.출처,fm}}
 const KEY=/^(판시사항|판결요지|결정요지)$/;
 const label=(repo,n,path)=>{const s=n.replace(/\.md$/,'');if(repo==='precedent-kr'){const p=s.split('_');return{a:p.slice(2).join(' ')||s,b:p[0]+' · '+(p[1]||'')}}
  return{a:n==='본문.md'?path.split('/').pop():s}};
+
+Object.assign(P,{ls:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',pu:'<path d="M12 5v14M5 12h14"/>',ck:'<path d="M20 6 9 17l-5-5"/>',pe:'<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',tr:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>'});
+const RAW='https://raw.githubusercontent.com/legalize-kr/';
+const fetchDoc=async(repo,path)=>{const r=await fetch(`${RAW}${repo}/main/${enc(path)}`);if(!r.ok)throw Error('문서를 불러오지 못했습니다 ('+r.status+')');return parse(await r.text(),repo,path)};
+const CASE=/\d{2,4}\s*[가-힣]{1,4}\s*\d+/;
+const CATS=['민사','형사','일반행정','세무','가사','특허','선거·특별','기타'];
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const isSup=p=>/(^|\/)대법원[_/]/.test(p);
+const rm=(d,ids)=>{const docs={...d.docs};ids.forEach(i=>delete docs[i]);return{...d,docs,lists:(d.lists||[]).map(l=>({...l,ids:l.ids.filter(i=>!ids.includes(i))}))}};
+const findByName=async(no,tok)=>{const kw=(no.match(/[가-힣]+/)||[''])[0];
+ const hint=/^(다|마|카|라|아|자|차|가|나)/.test(kw)?'민사':/^(도|모|오|초|노|고|재)/.test(kw)?'형사':/^(두|누|구)/.test(kw)?'일반행정':/^(므|스|드|르|느)/.test(kw)?'가사':/^(후|허)/.test(kw)?'특허':'';
+ const order=[...(hint?[hint]:[]),...CATS.filter(c=>c!==hint)],found=[];
+ for(const k of order){for(const g of ['대법원','하급심']){
+  try{const P=`${k}/${g}`,ls=await list('precedent-kr',P,tok).catch(e=>{if(e.net&&tok)return list('precedent-kr',P,'');throw e});ls.forEach(e=>{if(!e.d&&e.n.endsWith('_'+no+'.md'))found.push(`${k}/${g}/${e.n}`)})}catch(e){if(/rate limit/i.test(e.message))throw Error('GitHub 무료 요청 한도(시간당 60회)를 초과했습니다. 잠시 후 다시 시도하거나 토큰을 사용하세요.')}}
+  if(found.length)break}
+ return found};
 
 function Empty({t}){return <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#B5B5B5]"><Ic n="book" s={22}/><span className="text-xs">{t}</span></div>}
 
@@ -105,19 +121,12 @@ function CaseSearch({tok,open}){
     for(const k of ['민사','형사','일반행정','세무','가사','특허','선거·특별','기타']){const p=`${k}/${gr}/${f}`;
      const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/precedent-kr/main/${enc(p)}`,{method:'HEAD'}).catch(()=>null);
      if(r&&r.ok){open('precedent-kr',p);setBusy(false);return}}}
-   const byName=async()=>{const CAT=['민사','형사','일반행정','세무','가사','특허','선거·특별','기타'],kw=(no.match(/[가-힣]+/)||[''])[0];
-    const hint=/^(다|마|카|라|아|자|차)/.test(kw)?'민사':/^(도|모|오|초|노|고|재)/.test(kw)?'형사':/^(두|누|구|아)/.test(kw)?'일반행정':/^(므|스|드|르|느)/.test(kw)?'가사':/^(후|허|hu)/.test(kw)?'특허':'';
-    const order=[...(hint?[hint]:[]),...CAT.filter(c=>c!==hint)],found=[];
-    for(const k of order){for(const g of ['대법원','하급심']){
-      try{const P=`${k}/${g}`,ls=await list('precedent-kr',P,tok).catch(e=>{if(e.net&&tok)return list('precedent-kr',P,'');throw e});ls.forEach(e=>{if(!e.d&&e.n.endsWith('_'+no+'.md'))found.push(`${k}/${g}/${e.n}`)})}catch(e){if(/rate limit/i.test(e.message))throw Error('GitHub 무료 요청 한도(시간당 60회)를 초과했습니다. 잠시 후 다시 시도하거나 토큰을 사용하세요.')}}
-     if(found.length)break}
-    return found};
-   let r=await byName(),note='';
+   let r=await findByName(no,tok),note='';
    if(!r.length&&tok){try{
     const s=x=>gh(`/search/code?q=${encodeURIComponent(`"${no}" ${x} repo:legalize-kr/precedent-kr`)}&per_page=50`,tok).then(j=>j.items).catch(e=>{if(/valid/i.test(e.message))return[];throw e});
     const a=await s('in:path'),b=await s('in:file');const seen={};
     r=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)).map(i=>i.path)}catch(e){if(!e.net)throw e;note='파일명으로는 찾지 못했고, 본문 검색(GitHub 코드검색)은 연결이 끊겨 실행하지 못했습니다.'}}
-   r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r);if(note&&!r.length)setErr(note)
+   r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r);if(note&&!r.length)setErr(note);if(r.length===1)open('precedent-kr',r[0])
   }catch(e){setErr(e.message)}
   setBusy(false)};
  return <div className="flex flex-col min-h-0 flex-1">
@@ -134,36 +143,137 @@ function CaseSearch({tok,open}){
     <span className="block text-sm truncate">{L.a}</span><span className="block text-xs text-[#999] truncate">{L.b} · {p.split('/')[0]}</span></button>})}
   </div></div>}
 
-function Side({kind,D,tok,open}){
+const SB="h-8 px-2.5 text-xs border border-[#E5E5E5] rounded-md text-[#555] hover:border-[#111] transition-colors shrink-0";
+const IB="h-8 w-8 flex items-center justify-center rounded-md text-[#777] hover:bg-[#F0F0EE] transition-colors shrink-0";
+
+function Modal({title,onClose,children}){return <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/25" onClick={onClose}>
+ <div onClick={e=>e.stopPropagation()} className="bg-white w-full sm:max-w-md max-h-[80dvh] flex flex-col rounded-t-xl sm:rounded-xl">
+  <div className="flex items-center px-4 h-12 border-b border-[#E5E5E5] shrink-0"><b className="flex-1 min-w-0 truncate font-medium text-sm t">{title}</b><button onClick={onClose} className="text-[#777] hover:text-[#111]"><Ic n="x"/></button></div>
+  <div className="sb overflow-y-auto px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">{children}</div></div></div>}
+
+function Row({a,b,c,onClick,left,right}){return <button onClick={onClick} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] flex items-center gap-2.5 transition-colors">{left}
+ <span className="flex-1 min-w-0"><span className="block text-sm truncate">{a}</span>{b&&<span className="block text-xs text-[#999] truncate">{b}</span>}{c&&<span className="block text-xs text-[#7C8B74] truncate mt-0.5">{c}</span>}</span>{right}</button>}
+
+function Multi({kind,D,setD,tok,onBack,onDone}){
+ const [name,setName]=useState(''),[txt,setTxt]=useState(''),[busy,setBusy]=useState(false),[prog,setProg]=useState(''),[res,setRes]=useState(null),[lid,setLid]=useState(null);
+ const run=async()=>{
+  const lines=txt.split('\n').map(s=>s.trim()).filter(Boolean),nm=name.trim();if(!nm||!lines.length)return;
+  setBusy(true);setRes(null);const out=[],recs=[],ids=[];
+  for(let i=0;i<lines.length;i++){
+   setProg(`${i+1} / ${lines.length}`);const ln=lines[i],m=ln.match(CASE);
+   if(!m){out.push({ln,st:'사건번호 형식이 아님',ok:0});continue}
+   const no=m[0].replace(/\s/g,''),dm=ln.match(/\d{4}-\d{2}-\d{2}/);let r;
+   try{r=await findByName(no,tok)}catch(e){out.push({ln,st:e.message,ok:0});if(/한도/.test(e.message))break;continue}
+   if(dm){const f=r.filter(p=>p.includes(dm[0]));if(f.length)r=f}
+   if(!r.length){out.push({ln,st:'검색 결과 없음',ok:0});continue}
+   let pk=r,st='추가됨';
+   if(r.length>1){pk=r.filter(isSup);if(!pk.length){out.push({ln,st:`${r.length}건 검색됨 · 대법원 판결이 없어 제외`,ok:0});continue}st=`${r.length}건 중 대법원 ${pk.length}건만 추가`}
+   for(const p of pk){let rec;try{const d=await fetchDoc('precedent-kr',p);rec={id:d.id,repo:d.repo,path:p,title:d.title,meta:d.meta,tags:[],hl:{}}}
+    catch{const L=label('precedent-kr',p.split('/').pop(),p);rec={id:'precedent-kr:'+p,repo:'precedent-kr',path:p,title:L.a,meta:L.b,tags:[],hl:{}}}
+    recs.push(rec);ids.push(rec.id)}
+   out.push({ln,st,ok:1});
+  }
+  const ex=(D.lists||[]).find(l=>l.kind===kind&&l.name===nm),id0=ex?ex.id:uid();
+  setD(d=>{const docs={...d.docs};recs.forEach(r=>{if(!docs[r.id])docs[r.id]=r});const ls=d.lists||[],e=ls.find(l=>l.id===id0);
+   return{...d,docs,lists:e?ls.map(l=>l.id===id0?{...l,ids:[...new Set([...l.ids,...ids])]}:l):[...ls,{id:id0,name:nm,kind,ids:[...new Set(ids)]}]}});
+  setLid(id0);setRes(out);setBusy(false);setProg('')};
+ const inp="w-full border border-[#E5E5E5] rounded-md px-2.5 text-sm outline-none focus:border-[#111] transition-colors bg-transparent";
+ return <div className="sb flex-1 overflow-y-auto px-4 pt-3 pb-6">
+  <div className="flex items-center gap-1 mb-3"><button onClick={onBack} className="text-[#777] hover:text-[#111] -ml-1 h-8 w-7 flex items-center"><Ic n="cl" s={16}/></button><b className="text-sm font-medium t">다중입력으로 리스트 만들기</b></div>
+  {!res?<>
+   <label className="block text-xs text-[#777] mb-1">리스트 제목</label>
+   <input value={name} onChange={e=>setName(e.target.value)} placeholder="예: 상속 관련 판례" className={inp+" h-9 mb-3"}/>
+   <label className="block text-xs text-[#777] mb-1">사건번호 (한 줄에 하나)</label>
+   <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={8} placeholder={"2022다12345\n2000므1257\n2019두54321"} className={inp+" py-2 leading-relaxed resize-y"}/>
+   <p className="text-[11px] text-[#999] mt-1.5 mb-3 leading-relaxed">결과가 1건이면 그대로 추가하고, 2건 이상이면 대법원 판결만 추가합니다. 같은 제목의 리스트가 이미 있으면 이어서 추가합니다.</p>
+   <button onClick={run} disabled={busy||!name.trim()||!txt.trim()} className="w-full h-10 rounded-md bg-[#111] text-white text-sm disabled:opacity-30 transition-opacity">{busy?`검색 중 ${prog}`:'검색해서 리스트 만들기'}</button>
+  </>:<>
+   <p className="text-sm mb-1">{res.filter(r=>r.ok).length}건 처리 완료 <span className="text-xs text-[#999]">/ 입력 {res.length}줄</span></p>
+   <div className="mb-3">{res.map((r,i)=><div key={i} className="flex gap-2 py-1.5 border-t border-[#EEE] text-xs"><span className={r.ok?'text-[#7C8B74]':'text-[#8a5a44]'}>{r.ok?'✓':'✗'}</span><span className="flex-1 min-w-0 break-words">{r.ln}</span><span className="text-[#999] text-right max-w-[45%]">{r.st}</span></div>)}</div>
+   <div className="flex gap-2"><button onClick={()=>onDone(lid)} className="flex-1 h-10 rounded-md bg-[#111] text-white text-sm">리스트 열기</button><button onClick={()=>{setRes(null);setTxt(res.filter(r=>!r.ok).map(r=>r.ln).join('\n'))}} className="h-10 px-4 rounded-md border border-[#E5E5E5] text-sm text-[#555]">실패분 다시</button></div>
+  </>}
+ </div>}
+
+function Library({kind,srcs,D,setD,tok,open}){
+ const [v,setV]=useState(null),[q,setQ]=useState(''),[sel,setSel]=useState([]),[chk,setChk]=useState(null),[te,setTe]=useState(false),[tn,setTn]=useState(''),[mu,setMu]=useState(false);
+ const lists=(D.lists||[]).filter(l=>l.kind===kind),all=Object.values(D.docs).filter(d=>srcs.some(s=>s.repo===d.repo)),cur=lists.find(l=>l.id===v);
+ useEffect(()=>{if(v&&v!=='all'&&!cur)setV(null)},[v,cur]);
+ const go=x=>{setV(x);setQ('');setSel([]);setChk(null);setTe(false);setMu(false)};
+ const newList=()=>{const n=(prompt('새 리스트 이름')||'').trim();if(n)setD(d=>({...d,lists:[...(d.lists||[]),{id:uid(),name:n,kind,ids:[]}]}))};
+ if(mu)return <Multi kind={kind} D={D} setD={setD} tok={tok} onBack={()=>setMu(false)} onDone={go}/>;
+ if(!v)return <div className="flex flex-col min-h-0 flex-1">
+  <div className="px-4 pt-3 flex items-center gap-2"><span className="flex-1 text-xs text-[#777]">리스트</span>
+   {kind==='p'&&<button onClick={()=>setMu(true)} className={SB}>다중입력</button>}<button onClick={newList} className={SB}>+ 새 리스트</button></div>
+  <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
+   <Row onClick={()=>go('all')} a="전체 보관함" b={all.length+'건'} right={<span className="text-[#BBB]"><Ic n="cr" s={15}/></span>}/>
+   {lists.map(l=><Row key={l.id} onClick={()=>go(l.id)} a={l.name} b={l.ids.filter(i=>D.docs[i]).length+'건'} right={<span className="text-[#BBB]"><Ic n="cr" s={15}/></span>}/>)}
+   {!lists.length&&<p className="px-2 pt-4 text-xs text-[#999] leading-relaxed">리스트를 만들어 문서를 모아보세요. 문서를 연 뒤 하단 <span className="inline-block align-middle"><Ic n="ls" s={13}/></span> 버튼으로 담을 수 있습니다.</p>}
+  </div></div>;
+ const base=v==='all'?all:(cur?cur.ids.map(i=>D.docs[i]).filter(Boolean):[]);
+ const tags=[...new Set(base.flatMap(d=>d.tags))].sort();
+ const shown=base.filter(d=>sel.every(t=>d.tags.includes(t))&&(d.title+d.meta+d.tags.join(' ')).includes(q.trim()));
+ const ck=chk||[],picked=base.filter(d=>ck.includes(d.id)),cnt={};picked.forEach(d=>d.tags.forEach(t=>cnt[t]=(cnt[t]||0)+1));
+ const toggle=id=>setChk(c=>c.includes(id)?c.filter(x=>x!==id):[...c,id]);
+ const patch=f=>setD(d=>({...d,docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,ck.includes(k)?{...r,tags:f(r.tags)}:r]))}));
+ const addT=()=>{const ts=tn.split(',').map(t=>t.trim().replace(/^#/,'')).filter(Boolean);if(ts.length&&ck.length)patch(a=>[...new Set([...a,...ts])]);setTn('')};
+ const fromList=()=>{setD(d=>({...d,lists:d.lists.map(l=>l.id===v?{...l,ids:l.ids.filter(i=>!ck.includes(i))}:l)}));setChk([])};
+ const delLib=()=>{if(ck.length&&confirm(`${ck.length}건을 서재에서 삭제합니다.\n태그·하이라이트가 함께 사라지고 모든 리스트에서 빠집니다.`)){setD(d=>rm(d,ck));setChk([])}};
+ const toList=lid=>{if(lid&&ck.length)setD(d=>({...d,lists:d.lists.map(l=>l.id===lid?{...l,ids:[...new Set([...l.ids,...ck])]}:l)}))};
+ const ren=()=>{const n=(prompt('리스트 이름',cur.name)||'').trim();if(n)setD(d=>({...d,lists:d.lists.map(l=>l.id===v?{...l,name:n}:l)}))};
+ const delList=()=>{if(confirm(`리스트 "${cur.name}"을(를) 삭제합니다. (문서는 서재에 남습니다)`)){setD(d=>({...d,lists:d.lists.filter(l=>l.id!==v)}));go(null)}};
+ return <div className="flex flex-col min-h-0 flex-1">
+  <div className="px-4 pt-3 flex items-center gap-0.5">
+   <button onClick={()=>go(null)} className="text-[#777] hover:text-[#111] -ml-1 h-8 w-7 flex items-center"><Ic n="cl" s={16}/></button>
+   <b className="flex-1 min-w-0 truncate text-sm font-medium t">{v==='all'?'전체 보관함':cur.name}<span className="text-xs text-[#999] font-light ml-1.5">{base.length}</span></b>
+   {cur&&<><button onClick={ren} className={IB} title="이름 수정"><Ic n="pe" s={15}/></button><button onClick={delList} className={IB} title="리스트 삭제"><Ic n="tr" s={15}/></button></>}
+   <button onClick={()=>{setChk(c=>c?null:[]);setTe(false)}} className={`h-8 px-2.5 text-xs rounded-md border transition-colors ${chk?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#555]'}`}>선택</button>
+  </div>
+  <div className="px-4 pt-2"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
+   <input value={q} onChange={e=>setQ(e.target.value)} placeholder="제목·태그 검색" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div></div>
+  {tags.length>0&&<div className="px-4 pt-3 flex flex-wrap gap-1.5">{tags.map(t=><button key={t} onClick={()=>setSel(s=>s.includes(t)?s.filter(x=>x!==t):[...s,t])} className={`px-2 h-6 text-xs rounded-full border transition-colors ${sel.includes(t)?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#666]'}`}>{t}</button>)}</div>}
+  <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
+   {!shown.length&&<Empty t={base.length?'조건에 맞는 문서가 없습니다':'비어 있습니다'}/>}
+   {shown.map(d=><Row key={d.id} onClick={()=>chk?toggle(d.id):open(d.repo,d.path)} a={d.title} b={d.meta} c={d.tags.length>0&&d.tags.map(t=>'#'+t).join(' ')}
+    left={chk&&<span className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center ${ck.includes(d.id)?'bg-[#111] border-[#111] text-white':'border-[#CCC]'}`}>{ck.includes(d.id)&&<Ic n="ck" s={11}/>}</span>}/>)}
+  </div>
+  {chk&&<div className="border-t border-[#E5E5E5] px-3 py-2 pb-[max(.5rem,env(safe-area-inset-bottom))]">
+   {te&&<div className="mb-2">
+    <div className="flex flex-wrap gap-1.5 mb-2">{Object.keys(cnt).sort().map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1]">{t}<span className="text-[#7C8B74]">{cnt[t]}</span><button onClick={()=>patch(a=>a.filter(x=>x!==t))} className="text-[#777] hover:text-[#111]" title="선택한 문서 전체에서 제거"><Ic n="x" s={12}/></button></span>)}
+     {!Object.keys(cnt).length&&<span className="text-xs text-[#999]">{ck.length?'선택한 문서에 태그가 없습니다':'문서를 선택하세요'}</span>}</div>
+    <div className="flex gap-1.5"><input value={tn} onChange={e=>setTn(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addT()} placeholder="추가할 태그 (쉼표로 여러 개)" className="flex-1 min-w-0 h-8 px-2.5 text-sm border border-[#E5E5E5] rounded-md outline-none focus:border-[#111] bg-transparent"/><button onClick={addT} className={SB}>추가</button></div></div>}
+   <div className="flex items-center gap-1.5 flex-wrap">
+    <span className="text-xs text-[#777] mr-1">{ck.length}건</span>
+    <button onClick={()=>setChk(ck.length===shown.length?[]:shown.map(d=>d.id))} className={SB}>{ck.length===shown.length&&shown.length?'해제':'전체'}</button>
+    <button onClick={()=>setTe(!te)} className={`${SB} ${te?'bg-[#E6EBE1] border-[#E6EBE1]':''}`}>태그</button>
+    {lists.filter(l=>l.id!==v).length>0&&<select value="" onChange={e=>toList(e.target.value)} className={SB+" bg-white"}><option value="">리스트에 추가</option>{lists.filter(l=>l.id!==v).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>}
+    {cur&&<button onClick={fromList} className={SB}>목록에서 제거</button>}
+    <button onClick={delLib} className={SB+" !text-[#8a5a44]"}>서재에서 삭제</button>
+   </div></div>}
+ </div>}
+
+function Side({kind,D,setD,tok,open}){
  const srcs=kind==='p'?[{repo:'precedent-kr',root:'',l:'판례'}]:[{repo:'legalize-kr',root:'kr',l:'법령'},{repo:'admrule-kr',root:'',l:'행정규칙'}];
- const docs=Object.values(D.docs).filter(d=>srcs.some(s=>s.repo===d.repo));
- const [tab,setTab]=useState(docs.length?'lib':'find'),[si,setSi]=useState(0),[q,setQ]=useState(''),[sel,setSel]=useState([]);
- const tags=[...new Set(docs.flatMap(d=>d.tags))].sort();
- const shown=docs.filter(d=>sel.every(t=>d.tags.includes(t))&&(d.title+d.meta+d.tags.join(' ')).includes(q.trim()));
+ const has=Object.values(D.docs).some(d=>srcs.some(s=>s.repo===d.repo))||(D.lists||[]).some(l=>l.kind===kind);
+ const [tab,setTab]=useState(has?'lib':'find'),[si,setSi]=useState(0);
  const T=(k,l)=><button onClick={()=>setTab(k)} className={`h-10 text-sm border-b transition-colors ${tab===k?'border-[#111] text-[#111]':'border-transparent text-[#999]'}`}>{l}</button>;
  return <div className="flex flex-col h-full">
   <div className="flex gap-5 px-4 border-b border-[#E5E5E5]">{T('lib','서재')}{T('find','탐색')}</div>
   {tab==='find'?<>
    {srcs.length>1&&<div className="flex gap-1 px-4 pt-3">{srcs.map((s,i)=><button key={s.repo} onClick={()=>setSi(i)} className={`px-2.5 h-7 text-xs rounded-full border transition-colors ${si===i?'bg-[#E6EBE1] border-[#E6EBE1] text-[#111]':'border-[#E5E5E5] text-[#777]'}`}>{s.l}</button>)}</div>}
    {kind==='p'?<CaseSearch tok={tok} open={open}/>:<Browse repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/>}</>:
-  <div className="flex flex-col min-h-0 flex-1">
-   <div className="px-4 pt-3"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
-    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="제목·태그 검색" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div></div>
-   {tags.length>0&&<div className="px-4 pt-3 flex flex-wrap gap-1.5">{tags.map(t=><button key={t} onClick={()=>setSel(s=>s.includes(t)?s.filter(x=>x!==t):[...s,t])} className={`px-2 h-6 text-xs rounded-full border transition-colors ${sel.includes(t)?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#666]'}`}>{t}</button>)}</div>}
-   <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
-    {!shown.length&&<Empty t={docs.length?'조건에 맞는 문서가 없습니다':'저장한 문서가 없습니다'}/>}
-    {shown.map(d=><button key={d.id} onClick={()=>open(d.repo,d.path)} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] transition-colors">
-     <span className="block text-sm truncate">{d.title}</span><span className="block text-xs text-[#999] truncate">{d.meta}</span>
-     {d.tags.length>0&&<span className="block text-xs text-[#7C8B74] truncate mt-0.5">{d.tags.map(t=>'#'+t).join(' ')}</span>}</button>)}
-   </div></div>}
+  <Library kind={kind} srcs={srcs} D={D} setD={setD} tok={tok} open={open}/>}
  </div>}
 
+const MK=/^(\s*)(\[\d+\]|\d{1,2}\.|[가나다라마바사아자차카타파하]\.)(?=\s|$)/;
 function Section({s,i,isOpen,toggle,hls,tool,onSel,onDel,fs}){
  let o=0;const out=[];
  s.t.split('\n').forEach((ln,k)=>{const a=o,b=o+ln.length;let p=a;const kids=[];
+  const mk=ln.match(MK),ms=mk?a+mk[1].length:0,me=mk?ms+mk[2].length:0;
+  const seg=(x,y,key)=>{if(!mk||y<=ms||x>=me)return s.t.slice(x,y);const n=[];if(x<ms)n.push(s.t.slice(x,ms));
+   n.push(<b key={key} className="font-semibold">{s.t.slice(Math.max(x,ms),Math.min(y,me))}</b>);if(y>me)n.push(s.t.slice(me,y));return n};
   hls.map((h,idx)=>[h,idx]).filter(([h])=>h[1]>a&&h[0]<b).sort((x,y)=>x[0][0]-y[0][0]).forEach(([h,idx])=>{const st=Math.max(h[0],p,a),e=Math.min(h[1],b);if(st>=e)return;
-   if(st>p)kids.push(s.t.slice(p,st));kids.push(<mark key={idx+'-'+k} data-h={idx} style={{background:COL[h[2]],cursor:tool==='x'?'pointer':'auto'}}>{s.t.slice(st,e)}</mark>);p=e});
-  if(p<b)kids.push(s.t.slice(p,b));
+   if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<mark key={idx+'-'+k} data-h={idx} style={{background:COL[h[2]],cursor:tool==='x'?'pointer':'auto'}}>{seg(st,e,'m'+idx)}</mark>);p=e});
+  if(p<b)kids.push(seg(p,b,'e'));
   out.push(s.hd.includes(k)?<b key={k} className="font-medium">{kids}</b>:<span key={k}>{kids}</span>,'\n');o=b+1});
  const body=<div data-b className="whitespace-pre-wrap break-words leading-[1.85] pb-6" style={{fontSize:fs}} onPointerUp={e=>onSel(i,e.currentTarget)} onClick={e=>{const m=e.target.closest('mark');if(m&&tool==='x')onDel(i,+m.dataset.h)}}>{out}</div>;
  if(!s.h)return body;
@@ -175,12 +285,13 @@ function Section({s,i,isOpen,toggle,hls,tool,onSel,onDel,fs}){
 function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
  const [L,setL]=useState(innerWidth>=1024),[R,setR]=useState(false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
+ const [info,setInfo]=useState(false),[lm,setLm]=useState(false),[nl,setNl]=useState('');
  const [op,setOp]=useState({}),[tool,setTool]=useState(null),[tg,setTg]=useState('');const sc=useRef();
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
  const open=async(repo,path)=>{setBusy(true);setErr('');if(innerWidth<1024){setL(false);setR(false)}
-  try{const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/${repo}/main/${enc(path)}`);if(!r.ok)throw Error('문서를 불러오지 못했습니다 ('+r.status+')');
-   const d=parse(await r.text(),repo,path);const keys=d.secs.filter(s=>s.h&&KEY.test(s.h));const first=d.secs.find(s=>s.h);const o={};
+  try{const d=await fetchDoc(repo,path);setD(x=>{const r=x.docs[d.id];return r&&(r.title!==d.title||r.meta!==d.meta)?{...x,docs:{...x.docs,[d.id]:{...r,title:d.title,meta:d.meta}}}:x});
+   const keys=d.secs.filter(s=>s.h&&KEY.test(s.h));const first=d.secs.find(s=>s.h);const o={};
    d.secs.forEach((s,i)=>{o[i]=repo!=='precedent-kr'||(keys.length?KEY.test(s.h):s===first)});
    setOp(o);setDoc(d);sc.current&&sc.current.scrollTo(0,0)}catch(e){setErr(e.message)}setBusy(false)};
  const rec=doc&&D.docs[doc.id];const tags=rec?rec.tags:[],hl=rec?rec.hl:{};
@@ -192,20 +303,38 @@ function App(){
   const a=pre.toString().length;addHl(i,[a,a+r.toString().length,tool]);s.removeAllRanges()},30);
  const pick=c=>{setTool(t=>t===c?null:c);const s=getSelection();if(c!=='x'&&s&&!s.isCollapsed){const n=s.anchorNode&&(s.anchorNode.nodeType===3?s.anchorNode.parentElement:s.anchorNode).closest('[data-b]');if(n){const i=[...document.querySelectorAll('[data-b]')].indexOf(n);const idx=doc.secs.map((x,k)=>k);const r=s.getRangeAt(0);if(n.contains(r.endContainer)){const pre=document.createRange();pre.selectNodeContents(n);pre.setEnd(r.startContainer,r.startOffset);const a=pre.toString().length;addHl(idx[i],[a,a+r.toString().length,c]);s.removeAllRanges()}}}};
  const addTag=()=>{const t=tg.trim().replace(/^#/,'');if(t&&!tags.includes(t))upd(r=>({...r,tags:[...r.tags,t]}));setTg('')};
+ const kindOf=doc&&(doc.repo==='precedent-kr'?'p':'l'),myLists=(D.lists||[]).filter(l=>l.kind===kindOf);
+ const mkRec=()=>({id:doc.id,repo:doc.repo,path:doc.path,title:doc.title,meta:doc.meta,tags:[],hl:{}});
+ const toggleList=lid=>setD(d=>({...d,docs:d.docs[doc.id]?d.docs:{...d.docs,[doc.id]:mkRec()},lists:(d.lists||[]).map(l=>l.id!==lid?l:{...l,ids:l.ids.includes(doc.id)?l.ids.filter(i=>i!==doc.id):[...l.ids,doc.id]})}));
+ const addList=()=>{const n=nl.trim();if(!n)return;setD(d=>({...d,docs:d.docs[doc.id]?d.docs:{...d.docs,[doc.id]:mkRec()},lists:[...(d.lists||[]),{id:uid(),name:n,kind:kindOf,ids:[doc.id]}]}));setNl('')};
+ const inAny=doc&&(D.lists||[]).some(l=>l.ids.includes(doc.id));
  const allTags=[...new Set(Object.values(D.docs).flatMap(d=>d.tags))];
  const setAll=v=>setOp(Object.fromEntries(doc.secs.map((_,i)=>[i,v])));
  const setKey=()=>{const o={};doc.secs.forEach((s,i)=>o[i]=doc.repo!=='precedent-kr'||KEY.test(s.h))};
- const toggleSave=()=>{if(rec){if((rec.tags.length||Object.values(rec.hl).some(a=>a.length))&&!confirm('태그와 하이라이트도 함께 삭제됩니다.'))return;setD(d=>{const x={...d.docs};delete x[doc.id];return{...d,docs:x}})}else upd(r=>r)};
+ const toggleSave=()=>{if(rec){if((rec.tags.length||Object.values(rec.hl).some(a=>a.length))&&!confirm('태그와 하이라이트도 함께 삭제되고 리스트에서도 빠집니다.'))return;setD(d=>rm(d,[doc.id]))}else upd(r=>r)};
  const Bt=({on,children,...p})=><button {...p} className={`h-9 min-w-9 px-2 flex items-center justify-center rounded-md transition-colors hover:bg-[#F0F0EE] ${on?'bg-[#E6EBE1]':''} ${p.className||''}`}>{children}</button>;
  const drawer=(side,on,kind)=><><div onClick={()=>side==='l'?setL(false):setR(false)} className={`lg:hidden fixed inset-0 bg-black/20 z-20 transition-opacity ${on?'opacity-100':'opacity-0 pointer-events-none'}`}/>
   <aside className={`fixed top-0 bottom-0 z-30 w-[88vw] max-w-80 lg:w-80 bg-white transition-transform duration-200 ${side==='l'?'left-0 border-r':'right-0 border-r-0 border-l'} border-[#E5E5E5] ${on?'translate-x-0':side==='l'?'-translate-x-full':'translate-x-full'}`}>
-   <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex justify-end px-2 pt-1 lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></div><Side kind={kind} D={D} tok={tok} open={open}/></div></aside></>;
+   <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex justify-end px-2 pt-1 lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open}/></div></aside></>;
  return <div className="h-full">
   {drawer('l',L,'p')}{drawer('r',R,'l')}
+  {info&&doc&&<Modal title="상세정보" onClose={()=>setInfo(false)}>
+   <h2 className="t text-base font-normal leading-snug mb-3">{doc.title}</h2>
+   <dl className="text-sm">{Object.entries(doc.fm||{}).filter(([k,v])=>v&&!/^(출처|source)$/i.test(k)).map(([k,v])=><div key={k} className="flex gap-3 py-1.5 border-t border-[#EEE]"><dt className="w-20 shrink-0 text-xs text-[#999] pt-0.5">{k}</dt><dd className="flex-1 min-w-0 break-words">{v}</dd></div>)}</dl>
+   <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-[#EEE]">
+    {doc.src&&<a href={doc.src} target="_blank" rel="noreferrer" className="h-8 px-3 inline-flex items-center gap-1.5 text-xs border border-[#E5E5E5] rounded-md text-[#555] hover:border-[#111]"><Ic n="ext" s={13}/>원문</a>}
+    <a href={`https://github.com/legalize-kr/${doc.repo}/blob/main/${enc(doc.path)}`} target="_blank" rel="noreferrer" className="h-8 px-3 inline-flex items-center gap-1.5 text-xs border border-[#E5E5E5] rounded-md text-[#555] hover:border-[#111]"><Ic n="ext" s={13}/>GitHub 파일</a></div>
+   {(tags.length>0||inAny)&&<p className="text-xs text-[#7C8B74] mt-3 leading-relaxed">{tags.map(t=>'#'+t).join(' ')}{inAny&&<span className="block text-[#999]">리스트: {(D.lists||[]).filter(l=>l.ids.includes(doc.id)).map(l=>l.name).join(', ')}</span>}</p>}
+  </Modal>}
+  {lm&&doc&&<Modal title="리스트에 담기" onClose={()=>setLm(false)}>
+   {!myLists.length&&<p className="text-xs text-[#999] pb-2">리스트가 없습니다. 아래에서 새로 만드세요.</p>}
+   {myLists.map(l=>{const on=l.ids.includes(doc.id);return <button key={l.id} onClick={()=>toggleList(l.id)} className="w-full flex items-center gap-2.5 px-1 py-2.5 text-left text-sm rounded-md hover:bg-[#F6F6F4]"><span className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center ${on?'bg-[#111] border-[#111] text-white':'border-[#CCC]'}`}>{on&&<Ic n="ck" s={11}/>}</span><span className="flex-1 min-w-0 truncate">{l.name}</span><span className="text-xs text-[#999]">{l.ids.length}</span></button>})}
+   <div className="flex gap-1.5 pt-3 mt-2 border-t border-[#EEE]"><input value={nl} onChange={e=>setNl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addList()} placeholder="새 리스트 이름" className="flex-1 min-w-0 h-9 px-2.5 text-sm border border-[#E5E5E5] rounded-md outline-none focus:border-[#111] bg-transparent"/><button onClick={addList} className={SB+" h-9"}>만들어 담기</button></div>
+  </Modal>}
   <div className={`h-full flex flex-col transition-[margin] duration-200 ${L?'lg:ml-80':''} ${R?'lg:mr-80':''}`}>
    <header className="flex items-center gap-1 px-2 h-12 border-b border-[#E5E5E5] shrink-0 pt-[env(safe-area-inset-top)] box-content">
     <Bt on={L} onClick={()=>setL(!L)} title="판례"><Ic n="pl"/></Bt>
-    <div className="flex-1 min-w-0 px-2 text-center">{doc&&<><div className="text-sm truncate t font-normal">{doc.title}</div><div className="text-[11px] text-[#999] truncate">{doc.meta}</div></>}</div>
+    <button onClick={()=>doc&&setInfo(true)} disabled={!doc} title="상세정보" className={`flex-1 min-w-0 px-2 h-10 text-center rounded-md transition-colors ${doc?'hover:bg-[#F6F6F4]':'cursor-default'}`}>{doc&&<><div className="text-sm truncate t font-normal">{doc.title}</div><div className="text-[11px] text-[#999] truncate">{doc.meta}</div></>}</button>
     {doc&&<><Bt on={!!rec} onClick={toggleSave} title="서재에 저장"><Ic n="bm" s={17}/></Bt>{doc.src&&<a href={doc.src} target="_blank" rel="noreferrer" title="원문"><Bt><Ic n="ext" s={17}/></Bt></a>}</>}
     <Bt onClick={()=>{const t=prompt('GitHub 토큰(선택) — 요청 한도 확대·본문 검색용. 이 브라우저에만 저장됩니다.',tok);if(t!==null)setD(d=>({...d,token:t.trim()}))}} title="토큰" on={!!tok}><Ic n="key" s={17}/></Bt>
     <Bt on={R} onClick={()=>setR(!R)} title="법령·규칙"><Ic n="pr"/></Bt>
@@ -232,6 +361,7 @@ function App(){
     <div className="max-w-2xl mx-auto px-2 py-1 flex items-center gap-0.5">
      {Object.entries(COL).map(([c,v])=><Bt key={c} on={tool===c} onMouseDown={e=>e.preventDefault()} onClick={()=>pick(c)} title="하이라이트"><span className="w-4 h-4 rounded-full border border-[#D5D5D0]" style={{background:v}}/></Bt>)}
      <Bt on={tool==='x'} onMouseDown={e=>e.preventDefault()} onClick={()=>pick('x')} title="하이라이트 지우기"><Ic n="er" s={17}/></Bt>
+     <Bt on={inAny} onClick={()=>setLm(true)} title="리스트에 담기"><Ic n="ls" s={17}/></Bt>
      <div className="flex-1"/>
      <Bt onClick={()=>setD(d=>({...d,fs:Math.max(13,d.fs-1)}))} title="글자 작게"><span className="text-xs">가</span></Bt>
      <Bt onClick={()=>setD(d=>({...d,fs:Math.min(24,d.fs+1)}))} title="글자 크게"><span className="text-base">가</span></Bt>
