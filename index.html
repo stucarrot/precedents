@@ -11,7 +11,7 @@
 <style>
 html,body{margin:0;height:100%;overflow-x:hidden}#root{height:100dvh}
 body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;color:#111;background:#fff;font-weight:300;word-break:keep-all;overflow-wrap:break-word}
-b,.t{letter-spacing:-.02em}u.ul{text-decoration:underline;text-decoration-color:#7C8B74;text-decoration-thickness:2px;text-underline-offset:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}::selection{background:#E6EBE1}
+b,.t{letter-spacing:-.02em}u.ul{text-decoration:underline;text-decoration-color:#000;text-decoration-thickness:1px;text-underline-offset:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}u.ul.sel{text-decoration-color:#8a5a44;text-decoration-thickness:3px}::selection{background:#E6EBE1}
 button,input{font:inherit;letter-spacing:inherit}button{cursor:pointer}
 .sb::-webkit-scrollbar{width:6px}.sb::-webkit-scrollbar-thumb{background:#E5E5E5;border-radius:3px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -301,17 +301,17 @@ function Toc({tree,go}){
    :tree.map(n=><TocNode key={n.i+':'+n.k} n={n} d={0} ex={ex} tg={tg} go={go}/>)}
  </div>}
 
-function Section({s,i,isOpen,toggle,hls,tool,onSel,onDel,fs}){
+function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs}){
  let o=0;const out=[];
  s.t.split('\n').forEach((ln,k)=>{const a=o,b=o+ln.length;let p=a;const kids=[];
   const mk=ln.match(MK),ms=mk?a+mk[1].length:0,me=mk?ms+mk[2].length:0;
   const seg=(x,y,key)=>{if(!mk||y<=ms||x>=me)return s.t.slice(x,y);const n=[];if(x<ms)n.push(s.t.slice(x,ms));
    n.push(<b key={key} className="font-semibold">{s.t.slice(Math.max(x,ms),Math.min(y,me))}</b>);if(y>me)n.push(s.t.slice(me,y));return n};
   hls.map((h,idx)=>[h,idx]).filter(([h])=>h[1]>a&&h[0]<b).sort((x,y)=>x[0][0]-y[0][0]).forEach(([h,idx])=>{const st=Math.max(h[0],p,a),e=Math.min(h[1],b);if(st>=e)return;
-   if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<u key={idx+'-'+k} data-h={idx} className="ul">{seg(st,e,'m'+idx)}</u>);p=e});
+   if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<u key={idx+'-'+k} data-h={idx} className={'ul'+(sel&&sel.i===i&&sel.k===idx?' sel':'')}>{seg(st,e,'m'+idx)}</u>);p=e});
   if(p<b)kids.push(seg(p,b,'e'));
   out.push(s.hd.includes(k)?<b key={k} data-a={i+'-'+k} className="font-semibold">{kids}</b>:<span key={k}>{kids}</span>,'\n');o=b+1});
- const body=<div data-b className="whitespace-pre-wrap break-words leading-[1.85] pb-6 text-black font-normal" style={{fontSize:fs}} onPointerUp={e=>onSel(i,e.currentTarget)} onClick={e=>{const m=e.target.closest('u[data-h]');const sl=getSelection();if(m&&(!sl||sl.isCollapsed))onDel(i,+m.dataset.h)}}>{out}</div>;
+ const body=<div data-b className="whitespace-pre-wrap break-words leading-[1.85] pb-6 text-black font-normal" style={{fontSize:fs}} onPointerUp={e=>onSel(i,e.currentTarget)} onClick={e=>{const sl=getSelection();if(sl&&!sl.isCollapsed)return;const m=e.target.closest('u[data-h]');onU(m?{i,k:+m.dataset.h}:null)}}>{out}</div>;
  if(!s.h)return body;
  return <section className="border-t border-[#E5E5E5]">
   <button data-a={i+'--1'} onClick={toggle} className="w-full flex items-center gap-2 py-3.5 text-left t"><span className={`text-[#999] transition-transform duration-200 ${isOpen?'rotate-90':''}`}><Ic n="cr" s={16}/></span>
@@ -322,7 +322,7 @@ function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
  const [L,setL]=usePS('L',innerWidth>=1024),[R,setR]=usePS('R',false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [toc,setToc]=useState(false),[info,setInfo]=useState(false),[lm,setLm]=useState(false),[nl,setNl]=useState('');
- const [op,setOp]=useState({}),[tool,setTool]=useState(null),[tg,setTg]=useState('');const sc=useRef();
+ const [op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef();
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
  const open=async(repo,path,keep)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
@@ -338,6 +338,8 @@ function App(){
  const upd=f=>setD(d=>{const r=d.docs[doc.id]||{id:doc.id,repo:doc.repo,path:doc.path,title:doc.title,meta:doc.meta,tags:[],hl:{}};return{...d,docs:{...d.docs,[doc.id]:f(r)}}});
  const addHl=(i,h)=>upd(r=>({...r,hl:{...r.hl,[i]:[...(r.hl[i]||[]),h]}}));
  const delHl=(i,k)=>upd(r=>({...r,hl:{...r.hl,[i]:r.hl[i].filter((_,x)=>x!==k)}}));
+ const pickU=v=>setDsel(p=>v&&p&&p.i===v.i&&p.k===v.k?null:v);
+ const delSel=()=>{if(dsel){delHl(dsel.i,dsel.k);setDsel(null)}};
  const onSel=(i,box)=>setTimeout(()=>{if(!tool)return;const s=getSelection();if(!s.rangeCount||s.isCollapsed)return;const r=s.getRangeAt(0);
   if(!box.contains(r.startContainer)||!box.contains(r.endContainer))return;const pre=document.createRange();pre.selectNodeContents(box);pre.setEnd(r.startContainer,r.startOffset);
   const a=pre.toString().length;addHl(i,[a,a+r.toString().length,tool]);s.removeAllRanges()},30);
@@ -345,6 +347,7 @@ function App(){
  const addTag=()=>{const t=tg.trim().replace(/^#/,'');if(t&&!tags.includes(t))upd(r=>({...r,tags:[...r.tags,t]}));setTg('')};
  const hasToc=!!doc&&doc.repo!=='precedent-kr'&&doc.secs.reduce((a,s)=>a+s.hd.length+(s.h?1:0),0)>1;
  const goToc=n=>{const closed=!op[n.i];setOp(o=>({...o,[n.i]:true}));setToc(false);setTimeout(()=>{const el=document.querySelector(`[data-a="${n.i}-${n.k}"]`);el&&el.scrollIntoView({block:'start'})},closed?280:80)};
+ useEffect(()=>{setDsel(null)},[doc&&doc.id]);
  useEffect(()=>{setD(d=>d.mig?d:{...d,mig:1,docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,{...r,leg:1}]))})},[]);
  const kindOf=doc&&(doc.repo==='precedent-kr'?'p':'l'),myLists=(D.lists||[]).filter(l=>l.kind===kindOf);
  const mkRec=()=>({id:doc.id,repo:doc.repo,path:doc.path,title:doc.title,meta:doc.meta,tags:[],hl:{}});
@@ -390,12 +393,13 @@ function App(){
      {!doc&&!busy&&!err&&<div className="py-24"><Empty t="문서를 선택하세요"/></div>}
      {doc&&!busy&&<article key={doc.id}>
       <h1 className="t text-2xl font-normal text-black leading-snug mb-6" style={{letterSpacing:'-.03em'}}>{doc.title}</h1>
-      {doc.secs.map((s,i)=><Section key={i} s={s} i={i} isOpen={!!op[i]} toggle={()=>setOp(o=>({...o,[i]:!o[i]}))} hls={hl[i]||[]} tool={tool} onSel={onSel} onDel={delHl} fs={D.fs}/>)}
+      {doc.secs.map((s,i)=><Section key={i} s={s} i={i} isOpen={!!op[i]} toggle={()=>setOp(o=>({...o,[i]:!o[i]}))} hls={hl[i]||[]} tool={tool} onSel={onSel} onU={pickU} sel={dsel} fs={D.fs}/>)}
       <div className="border-t border-[#E5E5E5]"/>
      </article>}
     </div>
    </main>
-   {doc&&!busy&&<footer className="border-t border-[#E5E5E5] shrink-0 pb-[env(safe-area-inset-bottom)]">
+   {doc&&!busy&&<footer className="relative border-t border-[#E5E5E5] shrink-0 pb-[env(safe-area-inset-bottom)]">
+    {dsel&&<button onClick={delSel} className="absolute right-4 -top-12 z-10 h-9 pl-3 pr-3.5 flex items-center gap-1.5 rounded-full bg-[#111] text-white text-xs shadow-lg"><Ic n="x" s={14}/>밑줄 삭제</button>}
     <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-2 flex items-center gap-1.5 flex-wrap">
      <span className="text-[#999] px-1"><Ic n="tag" s={15}/></span>
      {tags.map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1]">{t}<button onClick={()=>upd(r=>({...r,tags:r.tags.filter(x=>x!==t)}))} className="text-[#777] hover:text-[#111]"><Ic n="x" s={12}/></button></span>)}
@@ -403,7 +407,6 @@ function App(){
      <datalist id="tl">{allTags.map(t=><option key={t} value={t}/>)}</datalist>
     </div>
     <div className="max-w-3xl mx-auto px-2 py-1 flex items-center gap-0.5 flex-wrap">
-     <Bt on={tool==='a'} onMouseDown={e=>e.preventDefault()} onClick={()=>pick('a')} title="밑줄"><Ic n="ul" s={17}/></Bt>
      <Bt on={inAny} onClick={()=>setLm(true)} title="리스트에 담기"><Ic n="ls" s={17}/></Bt>
      {hasToc&&<Bt onClick={()=>setToc(true)} title="목차"><Ic n="tc" s={17}/></Bt>}
      <div className="flex-1"/>
@@ -411,6 +414,7 @@ function App(){
      <Bt onClick={()=>setD(d=>({...d,fs:Math.min(24,d.fs+1)}))} title="글자 크게"><span className="text-base">가</span></Bt>
      <Bt onClick={()=>setAll(true)} title="모두 펼치기"><Ic n="ud" s={17}/></Bt>
      <Bt onClick={()=>setAll(false)} title="모두 접기"><Ic n="du" s={17}/></Bt>
+     <Bt on={tool==='a'} onMouseDown={e=>e.preventDefault()} onClick={()=>pick('a')} title="밑줄"><Ic n="ul" s={17}/></Bt>
     </div>
    </footer>}
   </div>
