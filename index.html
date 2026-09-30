@@ -66,6 +66,8 @@ const RAW='https://raw.githubusercontent.com/legalize-kr/';
 const fetchDoc=async(repo,path)=>{const r=await fetch(`${RAW}${repo}/main/${enc(path)}`);if(!r.ok)throw Error('문서를 불러오지 못했습니다 ('+r.status+')');return parse(await r.text(),repo,path)};
 const CASE=/\d{2,4}\s*[가-힣]{1,4}\s*\d+/;
 const CATS=['민사','형사','일반행정','세무','가사','특허','선거·특별','기타'];
+const rj=k=>{try{return JSON.parse(localStorage.getItem('ui:'+k))}catch{return null}};
+const usePS=(k,init)=>{const [v,setV]=useState(()=>{const x=rj(k);return x===null?init:x});useEffect(()=>{try{localStorage.setItem('ui:'+k,JSON.stringify(v))}catch{}},[k,v]);return[v,setV]};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const isSup=p=>/(^|\/)대법원[_/]/.test(p);
 const rm=(d,ids)=>{const docs={...d.docs};ids.forEach(i=>delete docs[i]);return{...d,docs,lists:(d.lists||[]).map(l=>({...l,ids:l.ids.filter(i=>!ids.includes(i))}))}};
@@ -80,10 +82,9 @@ const findByName=async(no,tok)=>{const kw=(no.match(/[가-힣]+/)||[''])[0];
 function Empty({t}){return <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#B5B5B5]"><Ic n="book" s={22}/><span className="text-xs">{t}</span></div>}
 
 function Browse({repo,root,tok,open}){
- const [path,setPath]=useState(root),[ls,setLs]=useState(null),[err,setErr]=useState(''),[q,setQ]=useState(''),[n,setN]=useState(80),[hits,setHits]=useState(null);
- useEffect(()=>{setPath(root);setQ('');setHits(null)},[repo,root]);
+ const [path,setPath]=usePS('br:'+repo+':path',root),[ls,setLs]=useState(null),[err,setErr]=useState(''),[q,setQ]=usePS('br:'+repo+':q',''),[n,setN]=useState(80),[hits,setHits]=useState(null);const fst=useRef(1);
  useEffect(()=>{let ok=1;setLs(null);setErr('');setN(80);
-  list(repo,path,tok).then(r=>{if(!ok)return;setLs(r);if(path&&r.length===1&&!r[0].d)open(repo,path+'/'+r[0].n)}).catch(e=>ok&&setErr(e.message));return()=>{ok=0}},[repo,path]);
+  list(repo,path,tok).then(r=>{if(!ok)return;setLs(r);const f0=fst.current;fst.current=0;if(!f0&&path&&r.length===1&&!r[0].d)open(repo,path+'/'+r[0].n)}).catch(e=>ok&&setErr(e.message));return()=>{ok=0}},[repo,path]);
  const full=async()=>{if(!q.trim())return;if(!tok)return setErr('본문 검색에는 GitHub 토큰이 필요합니다.');setErr('');
   try{const j=await gh(`/search/code?q=${encodeURIComponent(q+' repo:legalize-kr/'+repo)}&per_page=40`,tok);setHits(j.items.map(i=>({n:i.path,d:false,full:true})))}catch(e){setErr(e.message)}};
  const terms=q.trim().split(/\s+/).filter(Boolean);
@@ -111,7 +112,7 @@ function Browse({repo,root,tok,open}){
   </div></div>}
 
 function CaseSearch({tok,open}){
- const [q,setQ]=useState(''),[rows,setRows]=useState(null),[err,setErr]=useState(''),[busy,setBusy]=useState(false);
+ const [q,setQ]=usePS('cs:q',''),[rows,setRows]=usePS('cs:rows',null),[err,setErr]=useState(''),[busy,setBusy]=useState(false);
  const run=async()=>{
   const m=q.match(/\d{2,4}\s*[가-힣]{1,4}\s*\d+/);const no=m?m[0].replace(/\s/g,''):q.trim();if(!no)return;
   setBusy(true);setErr('');setRows(null);
@@ -195,7 +196,7 @@ function Multi({kind,D,setD,tok,onBack,onDone}){
  </div>}
 
 function Library({kind,srcs,D,setD,tok,open}){
- const [v,setV]=useState(null),[q,setQ]=useState(''),[sel,setSel]=useState([]),[chk,setChk]=useState(null),[te,setTe]=useState(false),[tn,setTn]=useState(''),[mu,setMu]=useState(false);
+ const [v,setV]=usePS('lib:'+kind+':v',null),[q,setQ]=usePS('lib:'+kind+':q',''),[sel,setSel]=usePS('lib:'+kind+':sel',[]),[chk,setChk]=useState(null),[te,setTe]=useState(false),[tn,setTn]=useState(''),[mu,setMu]=useState(false);
  const lists=(D.lists||[]).filter(l=>l.kind===kind),all=Object.values(D.docs).filter(d=>srcs.some(s=>s.repo===d.repo)),cur=lists.find(l=>l.id===v);
  useEffect(()=>{if(v&&v!=='all'&&!cur)setV(null)},[v,cur]);
  const go=x=>{setV(x);setQ('');setSel([]);setChk(null);setTe(false);setMu(false)};
@@ -254,13 +255,13 @@ function Library({kind,srcs,D,setD,tok,open}){
 function Side({kind,D,setD,tok,open}){
  const srcs=kind==='p'?[{repo:'precedent-kr',root:'',l:'판례'}]:[{repo:'legalize-kr',root:'kr',l:'법령'},{repo:'admrule-kr',root:'',l:'행정규칙'}];
  const has=Object.values(D.docs).some(d=>srcs.some(s=>s.repo===d.repo))||(D.lists||[]).some(l=>l.kind===kind);
- const [tab,setTab]=useState(has?'lib':'find'),[si,setSi]=useState(0);
+ const [tab,setTab]=usePS('side:'+kind+':tab',has?'lib':'find'),[si,setSi]=usePS('side:'+kind+':si',0);
  const T=(k,l)=><button onClick={()=>setTab(k)} className={`h-10 text-sm border-b transition-colors ${tab===k?'border-[#111] text-[#111]':'border-transparent text-[#999]'}`}>{l}</button>;
  return <div className="flex flex-col h-full">
   <div className="flex gap-5 px-4 border-b border-[#E5E5E5]">{T('lib','서재')}{T('find','탐색')}</div>
   {tab==='find'?<>
    {srcs.length>1&&<div className="flex gap-1 px-4 pt-3">{srcs.map((s,i)=><button key={s.repo} onClick={()=>setSi(i)} className={`px-2.5 h-7 text-xs rounded-full border transition-colors ${si===i?'bg-[#E6EBE1] border-[#E6EBE1] text-[#111]':'border-[#E5E5E5] text-[#777]'}`}>{s.l}</button>)}</div>}
-   {kind==='p'?<CaseSearch tok={tok} open={open}/>:<Browse repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/>}</>:
+   {kind==='p'?<CaseSearch tok={tok} open={open}/>:<Browse key={srcs[si].repo} repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/>}</>:
   <Library kind={kind} srcs={srcs} D={D} setD={setD} tok={tok} open={open}/>}
  </div>}
 
@@ -284,16 +285,20 @@ function Section({s,i,isOpen,toggle,hls,tool,onSel,onDel,fs}){
 
 function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
- const [L,setL]=useState(innerWidth>=1024),[R,setR]=useState(false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
+ const [L,setL]=usePS('L',innerWidth>=1024),[R,setR]=usePS('R',false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [info,setInfo]=useState(false),[lm,setLm]=useState(false),[nl,setNl]=useState('');
  const [op,setOp]=useState({}),[tool,setTool]=useState(null),[tg,setTg]=useState('');const sc=useRef();
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
- const open=async(repo,path)=>{setBusy(true);setErr('');if(innerWidth<1024){setL(false);setR(false)}
+ const open=async(repo,path,keep)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
   try{const d=await fetchDoc(repo,path);setD(x=>{const r=x.docs[d.id];return r&&(r.title!==d.title||r.meta!==d.meta)?{...x,docs:{...x.docs,[d.id]:{...r,title:d.title,meta:d.meta}}}:x});
    const keys=d.secs.filter(s=>s.h&&KEY.test(s.h));const first=d.secs.find(s=>s.h);const o={};
    d.secs.forEach((s,i)=>{o[i]=repo!=='precedent-kr'||(keys.length?KEY.test(s.h):s===first)});
-   setOp(o);setDoc(d);sc.current&&sc.current.scrollTo(0,0)}catch(e){setErr(e.message)}setBusy(false)};
+   const sv=keep&&rj('op');setOp(sv&&sv.id===d.id?sv.op:o);setDoc(d);try{localStorage.setItem('ui:doc',JSON.stringify({repo,path}))}catch{}
+   setTimeout(()=>{const y=keep&&rj('y');if(sc.current)sc.current.scrollTo(0,y&&y.id===d.id?y.y:0)},80)}catch(e){setErr(e.message)}setBusy(false)};
+ useEffect(()=>{const c=rj('doc');if(c&&c.repo&&c.path)open(c.repo,c.path,true)},[]);
+ useEffect(()=>{if(doc)try{localStorage.setItem('ui:op',JSON.stringify({id:doc.id,op}))}catch{}},[op,doc]);
+ const st=useRef();const onScroll=e=>{const y=e.target.scrollTop;clearTimeout(st.current);st.current=setTimeout(()=>{if(doc)try{localStorage.setItem('ui:y',JSON.stringify({id:doc.id,y}))}catch{}},150)};
  const rec=doc&&D.docs[doc.id];const tags=rec?rec.tags:[],hl=rec?rec.hl:{};
  const upd=f=>setD(d=>{const r=d.docs[doc.id]||{id:doc.id,repo:doc.repo,path:doc.path,title:doc.title,meta:doc.meta,tags:[],hl:{}};return{...d,docs:{...d.docs,[doc.id]:f(r)}}});
  const addHl=(i,h)=>upd(r=>({...r,hl:{...r.hl,[i]:[...(r.hl[i]||[]),h]}}));
@@ -339,7 +344,7 @@ function App(){
     <Bt onClick={()=>{const t=prompt('GitHub 토큰(선택) — 요청 한도 확대·본문 검색용. 이 브라우저에만 저장됩니다.',tok);if(t!==null)setD(d=>({...d,token:t.trim()}))}} title="토큰" on={!!tok}><Ic n="key" s={17}/></Bt>
     <Bt on={R} onClick={()=>setR(!R)} title="법령·규칙"><Ic n="pr"/></Bt>
    </header>
-   <main ref={sc} className="sb flex-1 overflow-y-auto">
+   <main ref={sc} onScroll={onScroll} className="sb flex-1 overflow-y-auto">
     <div className="max-w-2xl mx-auto px-5 py-6">
      {busy&&<p className="py-20 text-center text-xs text-[#999]">불러오는 중</p>}
      {err&&!busy&&<p className="py-20 text-center text-xs text-[#8a5a44]">{err}</p>}
