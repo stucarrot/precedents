@@ -35,12 +35,11 @@ const Ic=({n,s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" s
 const COL={a:'#DDE6D3',b:'#EFE5CF',c:'#E4DCD6'};
 const enc=p=>p.split('/').map(encodeURIComponent).join('/');
 const cache={};
-const diagnose=async hadTok=>{
- const open=await fetch('https://api.github.com/zen').then(()=>true,()=>false);
- if(!open)return 'api.github.com 자체에 연결할 수 없습니다. ① 이 앱을 CSP가 걸린 곳(Claude 게시 페이지·샌드박스 iframe 등)에서 열었거나 ② 광고/보안 확장 프로그램·사내 방화벽·VPN이 차단 중입니다. F12 콘솔에 "Content Security Policy" 오류가 있으면 ①입니다 → GitHub Pages/Netlify 등에 올리거나 로컬에서 여세요.';
- if(hadTok)return '토큰 없는 요청은 되는데 토큰(Authorization 헤더) 요청만 막혔습니다. 이 헤더는 브라우저가 사전요청(OPTIONS)을 먼저 보내는데 확장 프로그램·프록시·보안 SW가 이를 차단할 때 생깁니다. 시크릿 창(확장 끔)이나 다른 네트워크(핫스팟)로 시도해 보세요.';
- return '네트워크 오류로 GitHub에 연결하지 못했습니다.'};
-const gh=async(u,tok)=>{let r;try{r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}})}catch(x){throw Error(await diagnose(!!tok))}const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(r.status===401?'토큰이 올바르지 않거나 만료되었습니다 (401).':r.status===403?(j.message||'요청 한도 초과 — 잠시 후 다시 시도하세요 (403).'):(j.message||r.status));return j};
+const diagnose=async(u,tok)=>{
+ const t=(url,h)=>fetch(url,{headers:h||{}}).then(r=>r.status,()=>'✗');
+ const A=await t('https://api.github.com/zen'),B=await t('https://api.github.com'+u),C=tok?await t('https://api.github.com/rate_limit',{Authorization:'Bearer '+tok}):'-';
+ return `GitHub API 연결 실패 [진단: 기본주소 ${A} · 같은 주소(토큰없이) ${B} · 토큰요청 ${C} · ✗=차단, 숫자=응답받음]`};
+const gh=async(u,tok)=>{let r;try{r=await fetch('https://api.github.com'+u,{headers:tok?{Authorization:'Bearer '+tok}:{}})}catch(x){throw Object.assign(Error(await diagnose(u,tok)),{net:true})}const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(r.status===401?'토큰이 올바르지 않거나 만료되었습니다 (401).':r.status===403?(j.message||'요청 한도 초과 — 잠시 후 다시 시도하세요 (403).'):(j.message||r.status));return j};
 const list=async(repo,path,tok)=>{const k=repo+'/'+path;if(cache[k])return cache[k];
  const j=await gh(`/repos/legalize-kr/${repo}/git/trees/main${path?':'+enc(path):''}`,tok);
  const r=j.tree.map(t=>({n:t.path,d:t.type==='tree'})).filter(t=>t.d||t.n.endsWith('.md')&&t.n!=='README.md');
@@ -106,11 +105,21 @@ function CaseSearch({tok,open}){
     for(const k of ['민사','형사','일반행정','세무','가사','특허','선거·특별','기타']){const p=`${k}/${gr}/${f}`;
      const r=await fetch(`https://raw.githubusercontent.com/legalize-kr/precedent-kr/main/${enc(p)}`,{method:'HEAD'}).catch(()=>null);
      if(r&&r.ok){open('precedent-kr',p);setBusy(false);return}}}
-   if(!tok)throw Error('사건번호 검색에는 GitHub 토큰이 필요합니다. 우측 상단 열쇠 아이콘에서 입력하세요. (법원·선고일을 함께 쓰면 토큰 없이 바로 열립니다)');
-   const s=x=>gh(`/search/code?q=${encodeURIComponent(`"${no}" ${x} repo:legalize-kr/precedent-kr`)}&per_page=50`,tok).then(j=>j.items).catch(e=>{if(/valid/i.test(e.message))return[];throw e});
-   const a=await s('in:path'),b=await s('in:file');const seen={};
-   const all=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)),hit=all.filter(i=>i.path.includes(no));
-   const r=(hit.length?hit:all).map(i=>i.path);r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r)
+   const byName=async()=>{const CAT=['민사','형사','일반행정','세무','가사','특허','선거·특별','기타'],kw=(no.match(/[가-힣]+/)||[''])[0];
+    const hint=/^(다|마|카|라|아|자|차)/.test(kw)?'민사':/^(도|모|오|초|노|고|재)/.test(kw)?'형사':/^(두|누|구|아)/.test(kw)?'일반행정':/^(므|스|드|르|느)/.test(kw)?'가사':/^(후|허|hu)/.test(kw)?'특허':'';
+    const order=[...(hint?[hint]:[]),...CAT.filter(c=>c!==hint)],found=[];
+    for(const k of order){for(const g of ['대법원','하급심']){
+      try{const ls=await list('precedent-kr',`${k}/${g}`,'');ls.forEach(e=>{if(!e.d&&e.n.endsWith('_'+no+'.md'))found.push(`${k}/${g}/${e.n}`)})}catch(e){if(/rate limit/i.test(e.message))throw Error('GitHub 무료 요청 한도(시간당 60회)를 초과했습니다. 잠시 후 다시 시도하거나 토큰을 사용하세요.')}}
+     if(found.length)break}
+    return found};
+   let r=null,note='';
+   if(tok){try{
+    const s=x=>gh(`/search/code?q=${encodeURIComponent(`"${no}" ${x} repo:legalize-kr/precedent-kr`)}&per_page=50`,tok).then(j=>j.items).catch(e=>{if(/valid/i.test(e.message))return[];throw e});
+    const a=await s('in:path'),b=await s('in:file');const seen={};
+    const all=[...a,...b].filter(i=>!seen[i.path]&&(seen[i.path]=1)),hit=all.filter(i=>i.path.includes(no));
+    r=(hit.length?hit:all).map(i=>i.path)}catch(e){if(!e.net)throw e;note=e.message+' → 토큰 없이 파일명 검색으로 대신했습니다.'}}
+   if(!r)r=await byName();
+   r.sort((x,y)=>(y.split('_')[1]||'').localeCompare(x.split('_')[1]||''));setRows(r);if(note)setErr(note)
   }catch(e){setErr(e.message)}
   setBusy(false)};
  return <div className="flex flex-col min-h-0 flex-1">
