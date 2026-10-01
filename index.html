@@ -446,6 +446,52 @@ function Issues({D,setD,open}){
   </Modal>,document.body)}
  </div>}
 
+P.st='<path d="M5 20v-7M12 20V5M19 20v-11"/>';
+const dkey=t=>{const d=new Date(t),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())};
+function Stats({D,onClose}){
+ const docs=Object.values(D.docs).filter(d=>d.repo==='precedent-kr'&&(d.reads||[]).length);
+ const day={};docs.forEach(d=>d.reads.forEach(t=>{const k=dkey(t),o=day[k]||(day[k]={s:new Set(),n:0});o.s.add(d.id);o.n++}));
+ const cnt=k=>day[k]?day[k].s.size:0,evs=k=>day[k]?day[k].n:0;
+ const now=new Date(),back=n=>new Date(now.getFullYear(),now.getMonth(),now.getDate()-n),today=dkey(now);
+ const distinct=days=>{const S=new Set();days.forEach(d=>{const o=day[dkey(d)];if(o)o.s.forEach(x=>S.add(x))});return S.size};
+ const last=n=>Array.from({length:n},(_,i)=>back(n-1-i));
+ const mDays=Array.from({length:now.getDate()},(_,i)=>new Date(now.getFullYear(),now.getMonth(),i+1));
+ const total=Object.values(day).reduce((a,o)=>a+o.n,0),keys=Object.keys(day),
+  avg30=(last(30).reduce((a,d)=>a+cnt(dkey(d)),0)/30).toFixed(1);
+ let streak=0;{let i=cnt(today)?0:1;while(cnt(dkey(back(i)))){streak++;i++}}
+ const best=keys.reduce((b,k)=>cnt(k)>(b?cnt(b):0)?k:b,null);
+ const yest=cnt(dkey(back(1)));
+ const d14=last(14),m14=Math.max(1,...d14.map(d=>cnt(dkey(d))));
+ const wk=[0,0,0,0,0,0,0];keys.forEach(k=>{const [y,m,dd]=k.split('-').map(Number);wk[new Date(y,m-1,dd).getDay()]+=cnt(k)});const mw=Math.max(1,...wk);
+ const start=back(now.getDay()+77),cells=Array.from({length:84},(_,i)=>new Date(start.getFullYear(),start.getMonth(),start.getDate()+i));
+ const col=n=>n>=4?'#5F7055':n>=3?'#7C8B74':n>=2?'#A9B9A0':n>=1?'#D2DCCB':'#F0F0EE';
+ const top=docs.slice().sort((a,b)=>b.reads.length-a.reads.length).slice(0,5);
+ const Card=({l,v,u})=><div className="rounded-lg border border-[#E5E5E5] px-3 py-2.5"><div className="text-[11px] text-[#999] mb-0.5">{l}</div><div className="text-lg tabular-nums leading-tight">{v}<span className="text-xs text-[#999] ml-0.5">{u}</span></div></div>;
+ const H=({t})=><p className="text-xs text-[#777] mt-5 mb-2">{t}</p>;
+ return ReactDOM.createPortal(<Modal title="읽기 통계 · 판례" onClose={onClose}>
+  <div className="rounded-xl bg-[#F3F6F0] border border-[#D2DCCB] px-4 py-4 flex items-end gap-3">
+   <div><div className="text-xs text-[#4A5A40] mb-1">오늘 읽은 판례</div><div className="text-4xl font-medium tabular-nums leading-none text-[#2F3B28]">{cnt(today)}<span className="text-base font-normal ml-1">건</span></div></div>
+   <div className="flex-1"/><div className="text-right text-xs text-[#6B7A62] leading-relaxed">읽음 {evs(today)}회<br/>어제 {yest}건</div></div>
+  {!docs.length&&<p className="text-xs text-[#999] mt-3 leading-relaxed">아직 읽음 기록이 없습니다. 판례 화면의 읽음 버튼을 누르면 여기에 집계됩니다.</p>}
+  <div className="grid grid-cols-2 gap-2 mt-3">
+   <Card l="최근 7일" v={distinct(last(7))} u="건"/><Card l="이번 달" v={distinct(mDays)} u="건"/>
+   <Card l="누적 (중복 제외)" v={docs.length} u="건"/><Card l="총 읽음 횟수" v={total} u="회"/>
+   <Card l="일평균 (30일)" v={avg30} u="건"/><Card l="연속 읽은 날" v={streak} u="일"/>
+   <Card l="읽은 날 수" v={keys.length} u="일"/><Card l="최고 기록" v={best?cnt(best):0} u={best?'건 · '+fmtD(new Date(best.replace(/-/g,'/')).getTime()):'건'}/></div>
+  <H t="최근 14일"/>
+  <div className="flex items-end gap-1 h-24">{d14.map(d=>{const k=dkey(d),n=cnt(k);return <div key={k} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
+   <span className="text-[10px] text-[#999] tabular-nums h-3.5">{n||''}</span>
+   <div className="w-full rounded-sm" style={{height:Math.max(n?4:2,n/m14*64),background:k===today?'#111':n?'#7C8B74':'#E5E5E5'}}/>
+   <span className={`text-[10px] mt-1 tabular-nums ${k===today?'text-[#111]':'text-[#AAA]'}`}>{d.getDate()}</span></div>})}</div>
+  <H t="최근 12주 (진할수록 많이 읽은 날)"/>
+  <div className="grid grid-flow-col gap-[3px]" style={{gridTemplateRows:'repeat(7,1fr)'}}>{cells.map(d=>{const k=dkey(d),fut=d>now&&k!==today;return <div key={k} title={k+' · '+cnt(k)+'건'} className="aspect-square rounded-[3px]" style={{background:fut?'transparent':col(cnt(k)),outline:k===today?'1.5px solid #111':'none'}}/>})}</div>
+  <H t="요일별 누적"/>
+  <div className="flex items-end gap-2 h-20">{wk.map((n,i)=><div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+   <span className="text-[10px] text-[#999] tabular-nums h-3.5">{n||''}</span><div className="w-full rounded-sm bg-[#A9B9A0]" style={{height:Math.max(n?4:2,n/mw*48),background:n?undefined:'#E5E5E5'}}/>
+   <span className="text-[10px] text-[#AAA] mt-1">{'일월화수목금토'[i]}</span></div>)}</div>
+  {top.length>0&&<><H t="많이 읽은 판례 TOP 5"/>{top.map((d,i)=><div key={d.id} className="flex items-center gap-2 py-2 border-b border-[#F0F0EE] last:border-0 text-sm"><span className="w-4 text-xs text-[#AAA] tabular-nums">{i+1}</span><span className="flex-1 min-w-0 truncate">{d.title}</span><span className="text-xs text-[#999] tabular-nums">{d.reads.length}회</span></div>)}</>}
+ </Modal>,document.body)}
+
 function Side({kind,D,setD,tok,open}){
  const srcs=kind==='p'?[{repo:'precedent-kr',root:'',l:'판례'}]:[{repo:'legalize-kr',root:'kr',l:'법령'},{repo:'admrule-kr',root:'',l:'행정규칙'}];
  const has=Object.values(D.docs).some(d=>srcs.some(s=>s.repo===d.repo))||(D.lists||[]).some(l=>l.kind===kind);
@@ -510,7 +556,7 @@ function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
  const [L,setL]=usePS('L',innerWidth>=1024),[R,setR]=usePS('R',false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [toc,setToc]=useState(false),[info,setInfo]=useState(false),[lm,setLm]=useState(false),[rl,setRl]=useState(false),[ex,setEx]=useState(false),[mp,setMp]=useState(false),[bar,setBar]=usePS('bar',true),[nav,setNav]=useState(()=>rj('nav')),[nl,setNl]=useState('');
- const [bub,setBub]=useState(null),[pend,setPend]=useState(null),[op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
+ const [stat,setStat]=useState(false),[bub,setBub]=useState(null),[pend,setPend]=useState(null),[op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
  const open=async(repo,path,keep,ctx,jmp)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
@@ -586,9 +632,10 @@ function App(){
  const Bt=({on,children,...p})=><button {...p} className={`h-9 min-w-8 sm:min-w-9 px-1.5 sm:px-2 flex items-center justify-center rounded-md transition-colors hover:bg-[#F0F0EE] ${on?'bg-[#E6EBE1]':''} ${p.className||''}`}>{children}</button>;
  const drawer=(side,on,kind)=><><div onClick={()=>side==='l'?setL(false):setR(false)} className={`lg:hidden fixed inset-0 bg-black/20 z-20 transition-opacity ${on?'opacity-100':'opacity-0 pointer-events-none'}`}/>
   <aside className={`fixed top-0 bottom-0 z-30 w-[88vw] max-w-80 lg:w-80 bg-white transition-transform duration-200 ${side==='l'?'left-0 border-r':'right-0 border-r-0 border-l'} border-[#E5E5E5] ${on?'translate-x-0':side==='l'?'-translate-x-full':'translate-x-full'}`}>
-   <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex justify-end px-2 pt-1 lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open}/></div></aside></>;
+   <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex items-center justify-between px-2 pt-1">{side==='l'?<Bt onClick={()=>setStat(true)} title="읽기 통계"><Ic n="st" s={17}/></Bt>:<span/>}<span className="lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></span></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open}/></div></aside></>;
  return <div className="h-full">
   {drawer('l',L,'p')}{drawer('r',R,'l')}
+  {stat&&<Stats D={D} onClose={()=>setStat(false)}/>}
   {bub&&<button onMouseDown={e=>e.preventDefault()} onPointerDown={e=>{e.preventDefault();selPara()}} style={{left:bub.x,top:bub.y,transform:'translateX(-50%)',WebkitUserSelect:'none',userSelect:'none'}} className="fixed z-40 h-9 px-3.5 rounded-full bg-[#111] text-white text-xs shadow-lg whitespace-nowrap">단락 선택</button>}
   {pend&&doc&&<IssuePick text={pend.text} issues={D.issues||[]} folders={D.folders||[]} onPick={id=>linkIssue(id)} onNew={n=>linkIssue(null,n)} onClose={()=>setPend(null)}/>}
   {info&&doc&&<Modal title="상세정보" onClose={()=>setInfo(false)}>
