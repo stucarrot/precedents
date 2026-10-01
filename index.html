@@ -15,6 +15,10 @@ b,.t{letter-spacing:-.02em}u.ul{text-decoration:underline;text-decoration-color:
 button,input{font:inherit;letter-spacing:inherit}button{cursor:pointer}
 .sb::-webkit-scrollbar{width:6px}.sb::-webkit-scrollbar-thumb{background:#E5E5E5;border-radius:3px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+/* 선택은 본문(data-b)에서만: 상단바·하단바·사이드패널·섹션 제목은 선택 불가 */
+header,footer,aside,main article h1,main section>button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+[data-b]{-webkit-user-select:text;user-select:text}
+input,textarea{-webkit-user-select:text;user-select:text}
 </style>
 </head>
 <body>
