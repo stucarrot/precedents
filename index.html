@@ -11,7 +11,7 @@
 <style>
 html,body{margin:0;height:100%;overflow-x:hidden}#root{height:100dvh}
 body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;color:#111;background:#fff;font-weight:300;word-break:keep-all;overflow-wrap:break-word}
-b,.t{letter-spacing:-.02em}u.ul{text-decoration:underline;text-decoration-color:#000;text-decoration-thickness:1px;text-underline-offset:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}u.ul.sel{text-decoration-color:#8a5a44;text-decoration-thickness:3px}::selection{background:#E6EBE1}
+b,.t{letter-spacing:-.02em}u.ul{text-decoration:underline;text-decoration-color:#000;text-decoration-thickness:1px;text-underline-offset:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}.hl{border-radius:3px;padding:1px 3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}.lv1{background:#F6D9DE}.lv2{background:#FBE2C8}.lv3{background:#D8E6F6}.lv4{background:#D9ECD4}.lv5{background:#E7DDF3}u.ul.sel{text-decoration-color:#8a5a44;text-decoration-thickness:3px}::selection{background:#E6EBE1}
 button,input{font:inherit;letter-spacing:inherit}button{cursor:pointer}
 .sb::-webkit-scrollbar{width:6px}.sb::-webkit-scrollbar-thumb{background:#E5E5E5;border-radius:3px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -358,12 +358,15 @@ function Toc({tree,go}){
    :tree.map(n=><TocNode key={n.i+':'+n.k} n={n} d={0} ex={ex} tg={tg} go={go}/>)}
  </div>}
 
-function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs}){
+function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs,law}){
  let o=0;const out=[];
  s.t.split('\n').forEach((ln,k)=>{const a=o,b=o+ln.length;let p=a;const kids=[];
-  const mk=ln.match(MK),ms=mk?a+mk[1].length:0,me=mk?ms+mk[2].length:0;
-  const seg=(x,y,key)=>{if(!mk||y<=ms||x>=me)return s.t.slice(x,y);const n=[];if(x<ms)n.push(s.t.slice(x,ms));
-   n.push(<b key={key} className="font-semibold">{s.t.slice(Math.max(x,ms),Math.min(y,me))}</b>);if(y>me)n.push(s.t.slice(me,y));return n};
+  const mr=[],ld=ln.length-ln.trimStart().length;
+   if(!law){const m=ln.match(MK);if(m)mr.push([a+m[1].length,a+m[1].length+m[2].length,'b'])}
+   else if(s.hd.includes(k)){const t=ln.trim(),c=/^제\s*\d+조/.test(t)?'lv3':/^제\s*\d+절/.test(t)?'lv2':/^제\s*\d+장/.test(t)?'lv1':'';if(c&&t)mr.push([a+ld,a+ld+t.length,c])}
+   else{const rx=[[/^(\s*)(제\s*\d+조(?:의\s*\d+)?(?:\s*\([^)]*\)|(?=\s*삭제)))/,'lv3'],[/^(\s*)([\u2460-\u2473\u3251-\u325F\u32B1-\u32BF])/,'lv4'],[/^(\s*)(\d{1,3}(?:의\d+)?\.)(?=\s|$)/,'lv5'],[/^(\s*)([가나다라마바사아자차카타파하]\.)(?=\s|$)/,'b']];
+    for(const [r,c] of rx){const m=ln.match(r);if(m){mr.push([a+m[1].length,a+m[1].length+m[2].length,c]);break}}}
+   const seg=(x,y,key)=>{const n=[];let q=x;mr.forEach(([ms,me,c],j)=>{const st=Math.max(ms,x),e=Math.min(me,y);if(e<=st)return;if(st>q)n.push(s.t.slice(q,st));const tx=s.t.slice(st,e);n.push(c==='b'?<b key={key+j} className="font-semibold">{tx}</b>:<span key={key+j} className={'hl '+c}>{tx}</span>);q=e});if(!n.length)return s.t.slice(x,y);if(q<y)n.push(s.t.slice(q,y));return n};
   hls.map((h,idx)=>[h,idx]).filter(([h])=>h[1]>a&&h[0]<b).sort((x,y)=>x[0][0]-y[0][0]).forEach(([h,idx])=>{const st=Math.max(h[0],p,a),e=Math.min(h[1],b);if(st>=e)return;
    if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<u key={idx+'-'+k} data-h={idx} className={'ul'+(sel&&sel.i===i&&sel.k===idx?' sel':'')}>{seg(st,e,'m'+idx)}</u>);p=e});
   if(p<b)kids.push(seg(p,b,'e'));
@@ -372,7 +375,7 @@ function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs}){
  if(!s.h)return body;
  return <section className="border-t border-[#E5E5E5]">
   <button data-a={i+'--1'} onClick={toggle} className="w-full flex items-center gap-2 py-3.5 text-left t"><span className={`text-[#999] transition-transform duration-200 ${isOpen?'rotate-90':''}`}><Ic n="cr" s={16}/></span>
-   <b className="font-medium text-[15px]">{s.h}</b>{hls.length>0&&<span className="text-xs text-[#7C8B74]">{hls.length}</span>}</button>
+   <b className="font-medium text-[15px]">{law&&/^제\s*\d+장/.test(s.h)?<span className="hl lv1">{s.h}</span>:s.h}</b>{hls.length>0&&<span className="text-xs text-[#7C8B74]">{hls.length}</span>}</button>
   <div className={`grid transition-[grid-template-rows] duration-200 ${isOpen?'grid-rows-[1fr]':'grid-rows-[0fr]'}`}><div className="overflow-hidden min-h-0"><div className="pl-4">{body}</div></div></div></section>}
 
 function App(){
@@ -471,7 +474,7 @@ function App(){
      {!doc&&!busy&&!err&&<div className="py-24"><Empty t="문서를 선택하세요"/></div>}
      {doc&&!busy&&<article key={doc.id}>
       <h1 className="t text-2xl font-normal text-black leading-snug mb-6" style={{letterSpacing:'-.03em'}}>{doc.title}</h1>
-      {doc.secs.map((s,i)=><Section key={i} s={s} i={i} isOpen={!!op[i]} toggle={()=>setOp(o=>({...o,[i]:!o[i]}))} hls={hl[i]||[]} tool={tool} onSel={onSel} onU={pickU} sel={dsel} fs={D.fs}/>)}
+      {doc.secs.map((s,i)=><Section key={i} s={s} i={i} isOpen={!!op[i]} toggle={()=>setOp(o=>({...o,[i]:!o[i]}))} hls={hl[i]||[]} tool={tool} onSel={onSel} onU={pickU} sel={dsel} fs={D.fs} law={doc.repo!=='precedent-kr'}/>)}
       <div className="border-t border-[#E5E5E5]"/>
      </article>}
     </div>
