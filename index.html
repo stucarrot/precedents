@@ -404,6 +404,10 @@ function App(){
  const addTag=()=>{const t=tg.trim().replace(/^#/,'');if(t&&!tags.includes(t))upd(r=>({...r,tags:[...r.tags,t]}));setTg('')};
  const hasToc=!!doc&&doc.repo!=='precedent-kr'&&doc.secs.reduce((a,s)=>a+s.hd.length+(s.h?1:0),0)>1;
  const goToc=n=>{const closed=!op[n.i];setOp(o=>({...o,[n.i]:true}));setToc(false);setTimeout(()=>{const el=document.querySelector(`[data-a="${n.i}-${n.k}"]`);el&&el.scrollIntoView({block:'start'})},closed?280:80)};
+ const arts=doc&&hasToc?(()=>{const a=[],all=[];doc.secs.forEach((s,i)=>{const ls=s.t.split('\n');s.hd.forEach(k=>{const it={i,k};all.push(it);if(/^제\s*\d+조(의\s*\d+)?/.test(ls[k].trim()))a.push(it)})});return a.length?a:all})():[];
+ const stepArt=dr=>{if(!arts.length||!sc.current)return;const top=sc.current.getBoundingClientRect().top;let cur=-1,at=false;
+  arts.forEach((a,x)=>{if(!op[a.i])return;const el=document.querySelector(`[data-a="${a.i}-${a.k}"]`);if(!el)return;const t=el.getBoundingClientRect().top-top;if(t<=8){cur=x;at=t>-24}});
+  const x=dr>0?cur+1:(at?cur-1:cur);if(x>=0&&x<arts.length)goToc(arts[x])};
  useEffect(()=>{setDsel(null)},[doc&&doc.id]);
  useEffect(()=>{try{localStorage.setItem('ui:nav',JSON.stringify(nav))}catch{}},[nav]);
  useEffect(()=>{setD(d=>d.mig?d:{...d,mig:1,docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,{...r,leg:1}]))})},[]);
@@ -473,6 +477,10 @@ function App(){
     </div>
    </main>
     {bar&&doc&&!busy&&<>
+     {hasToc&&<div className="absolute left-2 bottom-2 z-10 flex flex-col gap-1.5">
+      <button onClick={()=>stepArt(-1)} title="이전 조" className="w-9 h-9 rounded-full bg-black/[.07] hover:bg-black/10 text-black/45 flex items-center justify-center backdrop-blur-[2px]"><span className="rotate-180"><Ic n="cd" s={18}/></span></button>
+      <button onClick={()=>setToc(true)} title="목차" className="w-9 h-9 rounded-full bg-black/[.07] hover:bg-black/10 text-black/45 flex items-center justify-center backdrop-blur-[2px]"><Ic n="tc" s={17}/></button>
+      <button onClick={()=>stepArt(1)} title="다음 조" className="w-9 h-9 rounded-full bg-black/[.07] hover:bg-black/10 text-black/45 flex items-center justify-center backdrop-blur-[2px]"><Ic n="cd" s={18}/></button></div>}
      {prev&&<button onClick={()=>goN(prev)} title={'이전 · '+prev.title} className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-5 h-14 rounded-r-xl bg-black/[.07] text-black/35 hover:bg-black/10 flex items-center justify-center"><Ic n="cl" s={14}/></button>}
      {next&&<button onClick={()=>goN(next)} title={'다음 · '+next.title} className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-5 h-14 rounded-l-xl bg-black/[.07] text-black/35 hover:bg-black/10 flex items-center justify-center"><Ic n="cr" s={14}/></button>}
     </>}
@@ -481,7 +489,7 @@ function App(){
     {dsel&&<button onClick={delSel} className="absolute right-4 -top-12 z-10 h-9 pl-3 pr-3.5 flex items-center gap-1.5 rounded-full bg-[#111] text-white text-xs shadow-lg"><Ic n="x" s={14}/>밑줄 삭제</button>}
     <button onClick={()=>{setBar(v=>!v);setMp(false)}} title={bar?'하단바 접기':'하단바 펼치기'} className={`absolute left-1/2 -translate-x-1/2 -top-3 z-10 w-10 h-5 rounded-full bg-white border border-[#E5E5E5] text-[#999] hover:text-[#111] flex items-center justify-center ${bar?'':'opacity-70'}`}><span className={bar?'':'rotate-180'}><Ic n="cd" s={14}/></span></button>
     {bar&&<>
-    {mp&&<div className="absolute left-3 -top-12 z-10 flex items-center gap-1 px-1.5 h-10 rounded-full bg-white border border-[#E5E5E5] shadow-lg">{MARKS.map(m=><button key={m.k} onClick={()=>toggleMark(m.k)} title={m.l} style={{opacity:marks.includes(m.k)?1:.4}} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${marks.includes(m.k)?'bg-[#F0F0EE]':'hover:bg-[#F6F6F4]'}`}><MarkIc m={m} s={18}/></button>)}</div>}
+    {mp&&<div className={`absolute ${hasToc?'left-14':'left-3'} -top-12 z-10 flex items-center gap-1 px-1.5 h-10 rounded-full bg-white border border-[#E5E5E5] shadow-lg`}>{MARKS.map(m=><button key={m.k} onClick={()=>toggleMark(m.k)} title={m.l} style={{opacity:marks.includes(m.k)?1:.4}} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${marks.includes(m.k)?'bg-[#F0F0EE]':'hover:bg-[#F6F6F4]'}`}><MarkIc m={m} s={18}/></button>)}</div>}
     <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-2 flex items-center gap-1.5 flex-nowrap overflow-x-auto" style={{scrollbarWidth:'none'}}>
      <span className="text-[#999] px-1 shrink-0"><Ic n="tag" s={15}/></span>
      {tags.map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1] shrink-0 whitespace-nowrap">{t}<button onClick={()=>upd(r=>({...r,tags:r.tags.filter(x=>x!==t)}))} className="text-[#777] hover:text-[#111]"><Ic n="x" s={12}/></button></span>)}
@@ -491,7 +499,6 @@ function App(){
     <div className="max-w-3xl mx-auto px-1.5 py-1 flex items-center flex-nowrap gap-0.5 max-sm:gap-0 max-sm:[&>button]:min-w-[28px] max-sm:[&>button]:px-1">
      <button onPointerDown={rdDown} onPointerUp={rdUp} onPointerLeave={rdCancel} onPointerCancel={rdCancel} onContextMenu={e=>e.preventDefault()} title="읽음 +1 (꾹 누르면 기록)" style={{WebkitTouchCallout:'none',WebkitUserSelect:'none',userSelect:'none',touchAction:'manipulation'}} className={`ml-0.5 mr-1 w-7 h-7 shrink-0 rounded-full border flex items-center justify-center text-[11px] tabular-nums transition-colors active:bg-[#E6EBE1] ${reads.length?'border-[#7C8B74] text-[#4A5A40] bg-[#F3F6F0]':'border-[#CCC] text-[#999]'}`}>{reads.length}</button>
      <Bt on={inAny} onClick={()=>setLm(true)} title="리스트에 담기"><Ic n="ls" s={17}/></Bt>
-     {hasToc&&<Bt onClick={()=>setToc(true)} title="목차"><Ic n="tc" s={17}/></Bt>}
      <Bt onClick={()=>setEx(true)} title="MD로 내보내기"><Ic n="dl" s={17}/></Bt>
      <Bt on={mp} onClick={()=>setMp(v=>!v)} title="마크"><Ic n="fl" s={17}/></Bt>
      <div className="flex-1"/>
