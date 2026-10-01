@@ -79,6 +79,15 @@ const buildToc=doc=>{const items=[];doc.secs.forEach((s,i)=>{if(s.h)items.push({
  const cnt=n=>n.cnt=n.ch.length?n.ch.reduce((a,c)=>a+cnt(c),0):1;root.ch.forEach(cnt);return root.ch};
 const mapOff=(o,n)=>{const m=new Array(o.length+1);let j=0;for(let i=0;i<o.length;i++){m[i]=j;if(j<n.length&&o[i]===n[j])j++}m[o.length]=j;return m};
 const remapHl=(hl,secs)=>Object.fromEntries(Object.entries(hl).map(([i,arr])=>{const s=secs[i];if(!s||!s.o||s.o===s.t)return[i,arr];const m=mapOff(s.o,s.t);return[i,arr.map(h=>[m[h[0]]??h[0],m[h[1]]??h[1],...h.slice(2)]).filter(h=>h[1]>h[0])]}));
+const nodeOf=n=>n&&(n.nodeType===3?n.parentElement:n);
+const offIn=(box,node,off)=>{const pre=document.createRange();pre.selectNodeContents(box);pre.setEnd(node,off);return pre.toString().length};
+const paraOf=(box,r)=>{const tx=box.textContent,a=offIn(box,r.startContainer,r.startOffset),b=offIn(box,r.endContainer,r.endOffset);
+ let ps=a>0?tx.lastIndexOf('\n',a-1)+1:0;const be=b>a&&tx[b-1]==='\n'?b-1:b;let pe=tx.indexOf('\n',be);if(pe<0)pe=tx.length;
+ while(ps<pe&&/[ \t]/.test(tx[ps]))ps++;
+ return{ps,pe,full:pe<=ps||(a<=ps&&b>=pe)}};
+const domPos=(box,off,end)=>{const w=document.createTreeWalker(box,NodeFilter.SHOW_TEXT);let acc=0,n,last=null;
+ while((n=w.nextNode())){const L=n.nodeValue.length;last=n;if(end?acc+L>=off:acc+L>off)return[n,off-acc];acc+=L}
+ return last?[last,last.nodeValue.length]:[box,0]};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const isSup=p=>/(^|\/)대법원[_/]/.test(p);
 const rm=(d,ids)=>{const docs={...d.docs};ids.forEach(i=>delete docs[i]);return{...d,docs,issues:(d.issues||[]).map(q=>({...q,items:q.items.filter(t=>!ids.includes(t.docId))})),lists:(d.lists||[]).map(l=>({...l,ids:l.ids.filter(i=>!ids.includes(i))}))}};
@@ -501,7 +510,7 @@ function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
  const [L,setL]=usePS('L',innerWidth>=1024),[R,setR]=usePS('R',false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [toc,setToc]=useState(false),[info,setInfo]=useState(false),[lm,setLm]=useState(false),[rl,setRl]=useState(false),[ex,setEx]=useState(false),[mp,setMp]=useState(false),[bar,setBar]=usePS('bar',true),[nav,setNav]=useState(()=>rj('nav')),[nl,setNl]=useState('');
- const [pend,setPend]=useState(null),[op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
+ const [bub,setBub]=useState(null),[pend,setPend]=useState(null),[op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
  const open=async(repo,path,keep,ctx,jmp)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
@@ -539,6 +548,15 @@ function App(){
   arts.forEach((a,x)=>{if(!op[a.i])return;const el=document.querySelector(`[data-a="${a.i}-${a.k}"]`);if(!el)return;const t=el.getBoundingClientRect().top-top;if(t<=8){cur=x;at=t>-24}});
   const x=dr>0?cur+1:(at?cur-1:cur);if(x>=0&&x<arts.length)goToc(arts[x])};
  useEffect(()=>{setDsel(null)},[doc&&doc.id]);
+ const bubInfo=()=>{const s=getSelection();if(!s||s.isCollapsed||!s.rangeCount)return null;const r=s.getRangeAt(0),b1=nodeOf(r.startContainer),b2=nodeOf(r.endContainer),
+  box=b1&&b1.closest('[data-b]');if(!box||!b2||box!==b2.closest('[data-b]'))return null;
+  const pr=paraOf(box,r);if(pr.full)return null;const rc=r.getClientRects()[0]||r.getBoundingClientRect();if(!rc||(!rc.width&&!rc.height))return null;
+  const below=rc.top<70;return{x:Math.min(Math.max(rc.left+rc.width/2,56),innerWidth-56),y:below?rc.bottom+34:rc.top-46}};
+ useEffect(()=>{let t;const sch=()=>{setBub(null);clearTimeout(t);t=setTimeout(()=>setBub(bubInfo()),220)};
+  document.addEventListener('selectionchange',sch);const m=sc.current;m&&m.addEventListener('scroll',sch,{passive:true});
+  return()=>{document.removeEventListener('selectionchange',sch);m&&m.removeEventListener('scroll',sch);clearTimeout(t)}},[]);
+ const selPara=()=>{const s=getSelection();if(!s||!s.rangeCount)return;const r=s.getRangeAt(0),box=nodeOf(r.startContainer).closest('[data-b]');if(!box)return;
+  const {ps,pe}=paraOf(box,r),[sn,so]=domPos(box,ps,false),[en,eo]=domPos(box,pe,true),nr=document.createRange();nr.setStart(sn,so);nr.setEnd(en,eo);s.removeAllRanges();s.addRange(nr);setBub(null)};
  useEffect(()=>{try{localStorage.setItem('ui:nav',JSON.stringify(nav))}catch{}},[nav]);
  useEffect(()=>{setD(d=>d.mig?d:{...d,mig:1,docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,{...r,leg:1}]))})},[]);
  const kindOf=doc&&(doc.repo==='precedent-kr'?'p':'l'),myLists=(D.lists||[]).filter(l=>l.kind===kindOf);
@@ -571,6 +589,7 @@ function App(){
    <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex justify-end px-2 pt-1 lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open}/></div></aside></>;
  return <div className="h-full">
   {drawer('l',L,'p')}{drawer('r',R,'l')}
+  {bub&&<button onMouseDown={e=>e.preventDefault()} onPointerDown={e=>{e.preventDefault();selPara()}} style={{left:bub.x,top:bub.y,transform:'translateX(-50%)',WebkitUserSelect:'none',userSelect:'none'}} className="fixed z-40 h-9 px-3.5 rounded-full bg-[#111] text-white text-xs shadow-lg whitespace-nowrap">단락 선택</button>}
   {pend&&doc&&<IssuePick text={pend.text} issues={D.issues||[]} folders={D.folders||[]} onPick={id=>linkIssue(id)} onNew={n=>linkIssue(null,n)} onClose={()=>setPend(null)}/>}
   {info&&doc&&<Modal title="상세정보" onClose={()=>setInfo(false)}>
    <h2 className="t text-base font-normal leading-snug mb-3">{doc.title}</h2>
