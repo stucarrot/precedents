@@ -177,7 +177,7 @@ const zip=files=>{const te=new TextEncoder(),loc=[],cen=[];let off=0;
 const dl=(name,blob)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
 const safeName=s=>s.replace(/[\\/:*?"<>|\r\n\t]+/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
 const exFile=(d,rec,o)=>{const fm=d.fm||{},prec=d.repo==='precedent-kr';let name=d.title;
- if(prec){const p=d.path.split('/').pop().replace(/\.md$/,'').split('_');name=[fm.사건번호||p[1],fm.사건명||p.slice(2).join(' ')||d.title,fm.법원명||(isSup(d.path)?'대법원':'')].filter(Boolean).join(' ')}
+ if(prec){const p=d.path.split('/').pop().replace(/\.md$/,'').split('_');name=[fm.사건번호||p[2]||p[1],fm.사건명||d.title,fm.법원명||(isSup(d.path)?'대법원':'')].filter(Boolean).join(' ')}
  name=safeName(name)||'문서';
  let secs=d.secs.map((s,i)=>({s,i}));
  if(prec&&!o.all){let z=-1;secs.forEach((x,k)=>{if(KEY.test(x.s.h))z=k});if(z>=0)secs=secs.slice(0,z+1)}
@@ -362,7 +362,11 @@ function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs,law}){
  let o=0;const out=[];
  s.t.split('\n').forEach((ln,k)=>{const a=o,b=o+ln.length;let p=a;const kids=[];
   const mr=[],ld=ln.length-ln.trimStart().length;
-   if(!law){const m=ln.match(MK);if(m)mr.push([a+m[1].length,a+m[1].length+m[2].length,'b'])}
+   if(!law){const key=KEY.test(s.h),m=ln.match(MK);
+    if(m)mr.push([a+m[1].length,a+m[1].length+m[2].length,key?'lv5 font-semibold':'b']);
+    if(key){let x;const r1=/\[\d{1,2}\]/g;while((x=r1.exec(ln))){const st=a+x.index,en=st+x[0].length;if(!mr.some(q=>st<q[1]&&en>q[0]))mr.push([st,en,'lv5 font-semibold'])}
+     const r2=/\(([^()0-9]{1,20})\)/g;while((x=r2.exec(ln))){const c=x[1],ng=/소극|부정|불인정|불가능|무효|불허/.test(c),ps=/적극|긍정|인정|가능|유효|허용/.test(c.replace(/불인정|불가능|불허/g,''));if(!ng&&!ps)continue;mr.push([a+x.index,a+x.index+x[0].length,ng&&ps?'lv2':ng?'lv1':'lv4'])}
+     mr.sort((p,q)=>p[0]-q[0])}}
    else if(s.hd.includes(k)){const t=ln.trim(),c=/^제\s*\d+조/.test(t)?'lv3':/^제\s*\d+절/.test(t)?'lv2':/^제\s*\d+장/.test(t)?'lv1':'';if(c&&t)mr.push([a+ld,a+ld+t.length,c])}
    else{const rx=[[/^(\s*)(제\s*\d+조(?:의\s*\d+)?(?:\s*\([^)]*\)|(?=\s*삭제)))/,'lv3'],[/^(\s*)([\u2460-\u2473\u3251-\u325F\u32B1-\u32BF])/,'lv4'],[/^(\s*)(\d{1,3}(?:의\d+)?\.)(?=\s|$)/,'lv5'],[/^(\s*)([가나다라마바사아자차카타파하]\.)(?=\s|$)/,'b']];
     for(const [r,c] of rx){const m=ln.match(r);if(m){mr.push([a+m[1].length,a+m[1].length+m[2].length,c]);break}}}
