@@ -550,8 +550,8 @@ function App(){
  useEffect(()=>{setDsel(null)},[doc&&doc.id]);
  const bubInfo=()=>{const s=getSelection();if(!s||s.isCollapsed||!s.rangeCount)return null;const r=s.getRangeAt(0),b1=nodeOf(r.startContainer),b2=nodeOf(r.endContainer),
   box=b1&&b1.closest('[data-b]');if(!box||!b2||box!==b2.closest('[data-b]'))return null;
-  const pr=paraOf(box,r);if(pr.full)return null;const rc=r.getClientRects()[0]||r.getBoundingClientRect();if(!rc||(!rc.width&&!rc.height))return null;
-  const below=rc.top<70;return{x:Math.min(Math.max(rc.left+rc.width/2,56),innerWidth-56),y:below?rc.bottom+34:rc.top-46}};
+  const pr=paraOf(box,r);if(pr.full)return null;const rs=r.getClientRects(),f=rs[0]||r.getBoundingClientRect(),l=rs[rs.length-1]||f;if(!l||(!l.width&&!l.height))return null;
+  const y=l.bottom+30,up=y>innerHeight-110;return{x:Math.min(Math.max(l.left+l.width/2,56),innerWidth-56),y:up?f.top-46:y}};
  useEffect(()=>{let t;const sch=()=>{setBub(null);clearTimeout(t);t=setTimeout(()=>setBub(bubInfo()),220)};
   document.addEventListener('selectionchange',sch);const m=sc.current;m&&m.addEventListener('scroll',sch,{passive:true});
   return()=>{document.removeEventListener('selectionchange',sch);m&&m.removeEventListener('scroll',sch);clearTimeout(t)}},[]);
