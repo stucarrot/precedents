@@ -19,6 +19,9 @@ button,input{font:inherit;letter-spacing:inherit}button{cursor:pointer}
 header,footer,aside,main article h1,main section>button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 [data-b]{-webkit-user-select:text;user-select:text}
 input,textarea{-webkit-user-select:text;user-select:text}
+.mk{background:#111;color:transparent;-webkit-text-fill-color:transparent;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.mkr{background:#E6EBE1;border-radius:3px}
+.mkw{cursor:pointer;border-radius:3px;background:rgba(124,139,116,.14)}
 </style>
 </head>
 <body>
@@ -360,7 +363,7 @@ function IssuePick({text,issues,folders,onPick,onNew,onClose}){
   <div className="flex gap-1.5"><input value={n} onChange={e=>setN(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="새 쟁점 제목" className={FIN}/><button onClick={add} disabled={!n.trim()} className={SB+" h-9 disabled:opacity-30"}>만들어 연결</button></div>
  </Modal>,document.body)}
 
-function Issues({D,setD,open}){
+function Issues({D,setD,open,mv}){
  const iss=D.issues||[];
  const [v,setV]=usePS('iss:v',null),[q,setQ]=usePS('iss:q',''),[chk,setChk]=useState(null),[pop,setPop]=useState(null),[note,setNote]=useState(''),[mvo,setMvo]=useState('');
  const cur=iss.find(x=>x.id===v),fl=D.folders||[],[fv,setFv]=usePS('iss:f',null),curF=fl.find(x=>x.id===fv),nums=issNo(iss),[mvf,setMvf]=useState('');
@@ -432,7 +435,7 @@ function Issues({D,setD,open}){
     {chk&&<span className="pt-0.5"><Chk on={ck.includes(t.id)}/></span>}
     <span className="flex-1 min-w-0 block">
      <span className="flex items-center gap-1.5 mb-1.5 text-[11px] text-[#999]"><span className="truncate">{t.title}</span>{t.sec&&<span className={RC}>{t.sec}</span>}</span>
-     <span className="text-sm leading-relaxed text-black" style={CL}><u className="ul" style={{cursor:'inherit'}}>{t.text}</u></span></span></button>)}
+     <span className="text-sm leading-relaxed text-black" style={CL}><u className="ul" style={{cursor:'inherit'}}><MText text={t.text} mask={t.mask} on={mv}/></u></span></span></button>)}
   </div>
   {chk&&bar(<><span className="text-xs text-[#777] mr-1">{ck.length}개</span>
    <button onClick={()=>setChk(ck.length===cards.length?[]:cards.map(t=>t.id))} className={SB}>{ck.length===cards.length&&cards.length?'해제':'전체'}</button>
@@ -440,12 +443,17 @@ function Issues({D,setD,open}){
    <button onClick={()=>delItems(ck,true)} disabled={!ck.length} className={SB+" !text-[#8a5a44] disabled:opacity-30"}>쟁점에서 삭제</button></>)}
   {pt&&ReactDOM.createPortal(<Modal title={pt.title} onClose={()=>setPop(null)}>
    <p className="text-xs text-[#999] mb-3">{[cur.name,pt.meta,pt.sec].filter(Boolean).join(' · ')}</p>
-   <div className="text-sm leading-[1.85] whitespace-pre-wrap break-words mb-4"><u className="ul" style={{cursor:'text'}}>{pt.text}</u></div>
+   <div className="text-sm leading-[1.85] whitespace-pre-wrap break-words mb-4"><u className="ul" style={{cursor:'text'}}><MText text={pt.text} mask={pt.mask} on={mv} peek/></u></div>
    <div className="flex gap-2"><button onClick={()=>jump(pt)} className="flex-1 h-10 rounded-md bg-[#111] text-white text-sm">출처 판례로 이동</button>
     <button onClick={()=>delItems([pt.id],false)} className="h-10 px-4 rounded-md border border-[#E5E5E5] text-sm text-[#8a5a44]">삭제</button></div>
   </Modal>,document.body)}
  </div>}
 
+P.me='<rect x="3" y="9" width="11" height="6" rx="1.5" fill="currentColor"/><path d="M17 20.5l4-4-2-2-4 4v2z"/>';
+P.mv='<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="currentColor"/>';
+const MText=({text,mask,on,peek})=>{const [rv,setRv]=useState({});if(!on||!mask||!mask.length)return text;const S=new Set(mask);let i=0;
+ const tg=w=>{const t=Date.now();setRv(r=>{if(r[w]){const n={...r};delete n[w];return n}return{...r,[w]:t}});setTimeout(()=>setRv(r=>{if(r[w]!==t)return r;const n={...r};delete n[w];return n}),3000)};
+ return text.split(/(\S+)/).map((p,k)=>{if(!(k%2))return p;const w=i++;if(!S.has(w))return p;return <span key={k} className={rv[w]?'mkr':'mk'} onClick={peek?()=>tg(w):undefined} style={peek?{cursor:'pointer'}:undefined}>{p}</span>})};
 P.st='<path d="M5 20v-7M12 20V5M19 20v-11"/>';
 const dkey=t=>{const d=new Date(t),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())};
 function Stats({D,onClose}){
@@ -492,7 +500,7 @@ function Stats({D,onClose}){
   {top.length>0&&<><H t="많이 읽은 판례 TOP 5"/>{top.map((d,i)=><div key={d.id} className="flex items-center gap-2 py-2 border-b border-[#F0F0EE] last:border-0 text-sm"><span className="w-4 text-xs text-[#AAA] tabular-nums">{i+1}</span><span className="flex-1 min-w-0 truncate">{d.title}</span><span className="text-xs text-[#999] tabular-nums">{d.reads.length}회</span></div>)}</>}
  </Modal>,document.body)}
 
-function Side({kind,D,setD,tok,open}){
+function Side({kind,D,setD,tok,open,mv}){
  const srcs=kind==='p'?[{repo:'precedent-kr',root:'',l:'판례'}]:[{repo:'legalize-kr',root:'kr',l:'법령'},{repo:'admrule-kr',root:'',l:'행정규칙'}];
  const has=Object.values(D.docs).some(d=>srcs.some(s=>s.repo===d.repo))||(D.lists||[]).some(l=>l.kind===kind);
  const [tab,setTab]=usePS('side:'+kind+':tab',has?'lib':'find'),[si,setSi]=usePS('side:'+kind+':si',0);
@@ -502,7 +510,7 @@ function Side({kind,D,setD,tok,open}){
   {tab==='find'?<>
    {srcs.length>1&&<div className="flex gap-1 px-4 pt-3">{srcs.map((s,i)=><button key={s.repo} onClick={()=>setSi(i)} className={`px-2.5 h-7 text-xs rounded-full border transition-colors ${si===i?'bg-[#E6EBE1] border-[#E6EBE1] text-[#111]':'border-[#E5E5E5] text-[#777]'}`}>{s.l}</button>)}</div>}
    {kind==='p'?<CaseSearch tok={tok} open={open}/>:<Browse key={srcs[si].repo} repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/>}</>:
-  tab==='iss'&&kind==='p'?<Issues D={D} setD={setD} open={open}/>:<Library kind={kind} srcs={srcs} D={D} setD={setD} tok={tok} open={open}/>}
+  tab==='iss'&&kind==='p'?<Issues D={D} setD={setD} open={open} mv={mv}/>:<Library kind={kind} srcs={srcs} D={D} setD={setD} tok={tok} open={open}/>}
  </div>}
 
 const MK=/^(\s*)(\[\d+\]|\d{1,2}\.|[가나다라마바사아자차카타파하]\.)(?=\s|$)/;
@@ -528,8 +536,9 @@ function Toc({tree,go}){
    :tree.map(n=><TocNode key={n.i+':'+n.k} n={n} d={0} ex={ex} tg={tg} go={go}/>)}
  </div>}
 
-function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs,law}){
+function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs,law,mk}){
  let o=0;const out=[];
+ const WS=mk?hls.map(h=>{const r=[];if(!h[3])return r;const re=/\S+/g,t=s.t.slice(h[0],h[1]);let m;while((m=re.exec(t)))r.push([h[0]+m.index,h[0]+m.index+m[0].length]);return r}):null;
  s.t.split('\n').forEach((ln,k)=>{const a=o,b=o+ln.length;let p=a;const kids=[];
   const mr=[],ld=ln.length-ln.trimStart().length;
    if(!law){const key=KEY.test(s.h),m=ln.match(MK);
@@ -540,12 +549,16 @@ function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs,law}){
    else if(s.hd.includes(k)){const t=ln.trim(),c=/^제\s*\d+조/.test(t)?'lv3':/^제\s*\d+절/.test(t)?'lv2':/^제\s*\d+장/.test(t)?'lv1':'';if(c&&t)mr.push([a+ld,a+ld+t.length,c])}
    else{const rx=[[/^(\s*)(제\s*\d+조(?:의\s*\d+)?(?:\s*\([^)]*\)|(?=\s*삭제)))/,'lv3'],[/^(\s*)([\u2460-\u2473\u3251-\u325F\u32B1-\u32BF])/,'lv4'],[/^(\s*)(\d{1,3}(?:의\d+)?\.)(?=\s|$)/,'lv5'],[/^(\s*)([가나다라마바사아자차카타파하]\.)(?=\s|$)/,'b']];
     for(const [r,c] of rx){const m=ln.match(r);if(m){mr.push([a+m[1].length,a+m[1].length+m[2].length,c]);break}}}
-   const seg=(x,y,key)=>{const n=[];let q=x;mr.forEach(([ms,me,c],j)=>{const st=Math.max(ms,x),e=Math.min(me,y);if(e<=st)return;if(st>q)n.push(s.t.slice(q,st));const tx=s.t.slice(st,e);n.push(c==='b'?<b key={key+j} className="font-semibold">{tx}</b>:<span key={key+j} className={'hl '+c}>{tx}</span>);q=e});if(!n.length)return s.t.slice(x,y);if(q<y)n.push(s.t.slice(q,y));return n};
+   const T=(x,y,hi,key)=>{const tx=s.t.slice(x,y);if(!mk||hi==null||!hls[hi]||!hls[hi][3])return tx;const id=hls[hi][3],ms=mk.get(id);if(!mk.edit&&!(ms&&ms.size))return tx;
+    const W=WS[hi],o2=[],re=/\S+/g;let q2=0,m;while((m=re.exec(tx))){const ps=x+m.index,wi=W.findIndex(w=>ps>=w[0]&&ps<w[1]);if(wi<0)continue;if(m.index>q2)o2.push(tx.slice(q2,m.index));
+     o2.push(<span key={key+'w'+m.index} data-w={wi} data-hid={id} className={ms&&ms.has(wi)?(mk.edit||!mk.rev[id+':'+wi]?'mk':'mkr'):mk.edit?'mkw':''}>{m[0]}</span>);q2=m.index+m[0].length}
+    if(q2<tx.length)o2.push(tx.slice(q2));return o2};
+   const seg=(x,y,key,hi)=>{const n=[];let q=x;mr.forEach(([ms,me,c],j)=>{const st=Math.max(ms,x),e=Math.min(me,y);if(e<=st)return;if(st>q)n.push(T(q,st,hi,key+'a'+j));const tx=T(st,e,hi,key+'t'+j);n.push(c==='b'?<b key={key+j} className="font-semibold">{tx}</b>:<span key={key+j} className={'hl '+c}>{tx}</span>);q=e});if(!n.length)return T(x,y,hi,key+'z');if(q<y)n.push(T(q,y,hi,key+'y'));return n};
   hls.map((h,idx)=>[h,idx]).filter(([h])=>h[1]>a&&h[0]<b).sort((x,y)=>x[0][0]-y[0][0]).forEach(([h,idx])=>{const st=Math.max(h[0],p,a),e=Math.min(h[1],b);if(st>=e)return;
-   if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<u key={idx+'-'+k} data-h={idx} data-hid={h[3]||undefined} className={'ul'+(sel&&sel.i===i&&sel.k===idx?' sel':'')}>{seg(st,e,'m'+idx)}</u>);p=e});
+   if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<u key={idx+'-'+k} data-h={idx} data-hid={h[3]||undefined} className={'ul'+(sel&&sel.i===i&&sel.k===idx?' sel':'')}>{seg(st,e,'m'+idx,idx)}</u>);p=e});
   if(p<b)kids.push(seg(p,b,'e'));
   out.push(s.hd.includes(k)?<b key={k} data-a={i+'-'+k} className="font-semibold">{kids}</b>:<span key={k}>{kids}</span>,'\n');o=b+1});
- const body=<div data-b className="whitespace-pre-wrap break-words leading-[1.85] pb-6 text-black font-normal" style={{fontSize:fs}} onPointerUp={e=>onSel(i,e.currentTarget)} onClick={e=>{const sl=getSelection();if(sl&&!sl.isCollapsed)return;const m=e.target.closest('u[data-h]');onU(m?{i,k:+m.dataset.h}:null)}}>{out}</div>;
+ const body=<div data-b className="whitespace-pre-wrap break-words leading-[1.85] pb-6 text-black font-normal" style={{fontSize:fs,...(mk&&mk.edit?{WebkitUserSelect:'none',userSelect:'none'}:{})}} onPointerUp={e=>{if(!(mk&&mk.edit))onSel(i,e.currentTarget)}} onClick={e=>{if(mk&&mk.edit){const w=e.target.closest('[data-w]');if(w)mk.tog(w.dataset.hid,+w.dataset.w);return}const mw=mk&&e.target.closest('.mk,.mkr');if(mw){mk.peek(mw.dataset.hid,+mw.dataset.w);return}const sl=getSelection();if(sl&&!sl.isCollapsed)return;const m=e.target.closest('u[data-h]');onU(m?{i,k:+m.dataset.h}:null)}}>{out}</div>;
  if(!s.h)return body;
  return <section className="border-t border-[#E5E5E5]">
   <button data-a={i+'--1'} onClick={toggle} className="w-full flex items-center gap-2 py-3.5 text-left t"><span className={`text-[#999] transition-transform duration-200 ${isOpen?'rotate-90':''}`}><Ic n="cr" s={16}/></span>
@@ -556,7 +569,7 @@ function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
  const [L,setL]=usePS('L',innerWidth>=1024),[R,setR]=usePS('R',false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [toc,setToc]=useState(false),[info,setInfo]=useState(false),[lm,setLm]=useState(false),[rl,setRl]=useState(false),[ex,setEx]=useState(false),[mp,setMp]=useState(false),[bar,setBar]=usePS('bar',true),[nav,setNav]=useState(()=>rj('nav')),[nl,setNl]=useState('');
- const [stat,setStat]=useState(false),[bub,setBub]=useState(null),[pend,setPend]=useState(null),[op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
+ const [stat,setStat]=useState(false),[mEdit,setMEdit]=useState(false),[mView,setMView]=usePS('mview',false),[bub,setBub]=useState(null),[pend,setPend]=useState(null),[op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
  const open=async(repo,path,keep,ctx,jmp)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
@@ -630,9 +643,15 @@ function App(){
  const rdUp=()=>{clearTimeout(lp.current.t);if(!lp.current.f)addRead()};
  const rdCancel=()=>clearTimeout(lp.current.t);
  const Bt=({on,children,...p})=><button {...p} className={`h-9 min-w-8 sm:min-w-9 px-1.5 sm:px-2 flex items-center justify-center rounded-md transition-colors hover:bg-[#F0F0EE] ${on?'bg-[#E6EBE1]':''} ${p.className||''}`}>{children}</button>;
+ const isP=!!doc&&doc.repo==='precedent-kr',mmap={};(D.issues||[]).forEach(q=>q.items.forEach(t=>{if(t.mask&&t.mask.length)mmap[t.id]=new Set(t.mask)}));
+ const togMask=(hid,w)=>setD(d=>({...d,issues:(d.issues||[]).map(q=>q.items.some(t=>t.id===hid)?{...q,items:q.items.map(t=>t.id===hid?{...t,mask:(t.mask||[]).includes(w)?t.mask.filter(x=>x!==w):[...(t.mask||[]),w]}:t)}:q)}));
+ const [rev,setRev]=useState({});
+ const peek=(hid,w)=>{const k=hid+':'+w,t=Date.now();setRev(r=>{if(r[k]){const n={...r};delete n[k];return n}return{...r,[k]:t}});setTimeout(()=>setRev(r=>{if(r[k]!==t)return r;const n={...r};delete n[k];return n}),3000)};
+ const mk=isP&&(mEdit||mView)?{edit:mEdit,get:id=>mmap[id],tog:togMask,rev,peek}:null;
+ useEffect(()=>{if(!isP)setMEdit(false)},[isP]);
  const drawer=(side,on,kind)=><><div onClick={()=>side==='l'?setL(false):setR(false)} className={`lg:hidden fixed inset-0 bg-black/20 z-20 transition-opacity ${on?'opacity-100':'opacity-0 pointer-events-none'}`}/>
   <aside className={`fixed top-0 bottom-0 z-30 w-[88vw] max-w-80 lg:w-80 bg-white transition-transform duration-200 ${side==='l'?'left-0 border-r':'right-0 border-r-0 border-l'} border-[#E5E5E5] ${on?'translate-x-0':side==='l'?'-translate-x-full':'translate-x-full'}`}>
-   <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex items-center justify-between px-2 pt-1">{side==='l'?<Bt onClick={()=>setStat(true)} title="읽기 통계"><Ic n="st" s={17}/></Bt>:<span/>}<span className="lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></span></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open}/></div></aside></>;
+   <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex items-center justify-between px-2 pt-1">{side==='l'?<Bt onClick={()=>setStat(true)} title="읽기 통계"><Ic n="st" s={17}/></Bt>:<span/>}<span className="lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></span></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open} mv={mView}/></div></aside></>;
  return <div className="h-full">
   {drawer('l',L,'p')}{drawer('r',R,'l')}
   {stat&&<Stats D={D} onClose={()=>setStat(false)}/>}
@@ -672,7 +691,7 @@ function App(){
      {!doc&&!busy&&!err&&<div className="py-24"><Empty t="문서를 선택하세요"/></div>}
      {doc&&!busy&&<article key={doc.id}>
       <h1 className="t text-2xl font-normal text-black leading-snug mb-6" style={{letterSpacing:'-.03em'}}>{doc.title}</h1>
-      {doc.secs.map((s,i)=><Section key={i} s={s} i={i} isOpen={!!op[i]} toggle={()=>setOp(o=>({...o,[i]:!o[i]}))} hls={hl[i]||[]} tool={tool} onSel={onSel} onU={pickU} sel={dsel} fs={D.fs} law={doc.repo!=='precedent-kr'}/>)}
+      {doc.secs.map((s,i)=><Section key={i} s={s} i={i} isOpen={!!op[i]} toggle={()=>setOp(o=>({...o,[i]:!o[i]}))} hls={hl[i]||[]} tool={tool} onSel={onSel} onU={pickU} sel={dsel} fs={D.fs} law={doc.repo!=='precedent-kr'} mk={mk}/>)}
       <div className="border-t border-[#E5E5E5]"/>
      </article>}
     </div>
@@ -702,6 +721,8 @@ function App(){
      <Bt on={inAny} onClick={()=>setLm(true)} title="리스트에 담기"><Ic n="ls" s={17}/></Bt>
      <Bt onClick={()=>setEx(true)} title="MD로 내보내기"><Ic n="dl" s={17}/></Bt>
      <Bt on={mp} onClick={()=>setMp(v=>!v)} title="마크"><Ic n="fl" s={17}/></Bt>
+     <div className="flex-1"/>
+     {isP&&<><Bt on={mEdit} onClick={()=>{setMEdit(v=>!v);setTool(null);setDsel(null);const g=getSelection();g&&g.removeAllRanges()}} title="마스킹 편집"><Ic n="me" s={17}/></Bt><Bt on={mView} onClick={()=>setMView(v=>!v)} title="마스킹 보기"><Ic n="mv" s={17}/></Bt></>}
      <div className="flex-1"/>
      <Bt onClick={()=>setD(d=>({...d,fs:Math.max(13,d.fs-1)}))} title="글자 작게"><span className="text-xs">가</span></Bt>
      <Bt onClick={()=>setD(d=>({...d,fs:Math.min(24,d.fs+1)}))} title="글자 크게"><span className="text-base">가</span></Bt>
