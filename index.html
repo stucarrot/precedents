@@ -482,14 +482,14 @@ function App(){
     <button onClick={()=>{setBar(v=>!v);setMp(false)}} title={bar?'하단바 접기':'하단바 펼치기'} className={`absolute left-1/2 -translate-x-1/2 -top-3 z-10 w-10 h-5 rounded-full bg-white border border-[#E5E5E5] text-[#999] hover:text-[#111] flex items-center justify-center ${bar?'':'opacity-70'}`}><span className={bar?'':'rotate-180'}><Ic n="cd" s={14}/></span></button>
     {bar&&<>
     {mp&&<div className="absolute left-3 -top-12 z-10 flex items-center gap-1 px-1.5 h-10 rounded-full bg-white border border-[#E5E5E5] shadow-lg">{MARKS.map(m=><button key={m.k} onClick={()=>toggleMark(m.k)} title={m.l} style={{opacity:marks.includes(m.k)?1:.4}} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${marks.includes(m.k)?'bg-[#F0F0EE]':'hover:bg-[#F6F6F4]'}`}><MarkIc m={m} s={18}/></button>)}</div>}
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-2 flex items-center gap-1.5 flex-wrap">
-     <span className="text-[#999] px-1"><Ic n="tag" s={15}/></span>
-     {tags.map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1]">{t}<button onClick={()=>upd(r=>({...r,tags:r.tags.filter(x=>x!==t)}))} className="text-[#777] hover:text-[#111]"><Ic n="x" s={12}/></button></span>)}
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-2 flex items-center gap-1.5 flex-nowrap overflow-x-auto" style={{scrollbarWidth:'none'}}>
+     <span className="text-[#999] px-1 shrink-0"><Ic n="tag" s={15}/></span>
+     {tags.map(t=><span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 text-xs rounded-full bg-[#E6EBE1] shrink-0 whitespace-nowrap">{t}<button onClick={()=>upd(r=>({...r,tags:r.tags.filter(x=>x!==t)}))} className="text-[#777] hover:text-[#111]"><Ic n="x" s={12}/></button></span>)}
      <input list="tl" value={tg} onChange={e=>setTg(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()} onBlur={addTag} placeholder="태그 추가" className="flex-1 min-w-24 h-7 text-sm outline-none bg-transparent"/>
      <datalist id="tl">{allTags.map(t=><option key={t} value={t}/>)}</datalist>
     </div>
-    <div className="max-w-3xl mx-auto px-2 py-1 flex items-center gap-0.5 flex-wrap">
-     <button onPointerDown={rdDown} onPointerUp={rdUp} onPointerLeave={rdCancel} onPointerCancel={rdCancel} onContextMenu={e=>e.preventDefault()} title="읽음 +1 (꾹 누르면 기록)" style={{WebkitTouchCallout:'none',WebkitUserSelect:'none',userSelect:'none',touchAction:'manipulation'}} className={`ml-1 mr-1.5 w-8 h-8 shrink-0 rounded-full border flex items-center justify-center text-[11px] tabular-nums transition-colors active:bg-[#E6EBE1] ${reads.length?'border-[#7C8B74] text-[#4A5A40] bg-[#F3F6F0]':'border-[#CCC] text-[#999]'}`}>{reads.length}</button>
+    <div className="max-w-3xl mx-auto px-1.5 py-1 flex items-center flex-nowrap gap-0.5 max-sm:gap-0 max-sm:[&>button]:min-w-[28px] max-sm:[&>button]:px-1">
+     <button onPointerDown={rdDown} onPointerUp={rdUp} onPointerLeave={rdCancel} onPointerCancel={rdCancel} onContextMenu={e=>e.preventDefault()} title="읽음 +1 (꾹 누르면 기록)" style={{WebkitTouchCallout:'none',WebkitUserSelect:'none',userSelect:'none',touchAction:'manipulation'}} className={`ml-0.5 mr-1 w-7 h-7 shrink-0 rounded-full border flex items-center justify-center text-[11px] tabular-nums transition-colors active:bg-[#E6EBE1] ${reads.length?'border-[#7C8B74] text-[#4A5A40] bg-[#F3F6F0]':'border-[#CCC] text-[#999]'}`}>{reads.length}</button>
      <Bt on={inAny} onClick={()=>setLm(true)} title="리스트에 담기"><Ic n="ls" s={17}/></Bt>
      {hasToc&&<Bt onClick={()=>setToc(true)} title="목차"><Ic n="tc" s={17}/></Bt>}
      <Bt onClick={()=>setEx(true)} title="MD로 내보내기"><Ic n="dl" s={17}/></Bt>
