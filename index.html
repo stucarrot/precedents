@@ -74,10 +74,11 @@ const buildToc=doc=>{const items=[];doc.secs.forEach((s,i)=>{if(s.h)items.push({
  const root={ch:[]},st=[{lv:0,n:root}];items.forEach(it=>{if(it.lv===2&&/^부칙/.test(it.t))it={...it,lv:1};const n={...it,ch:[]};while(st[st.length-1].lv>=it.lv)st.pop();st[st.length-1].n.ch.push(n);st.push({lv:it.lv,n})});
  const cnt=n=>n.cnt=n.ch.length?n.ch.reduce((a,c)=>a+cnt(c),0):1;root.ch.forEach(cnt);return root.ch};
 const mapOff=(o,n)=>{const m=new Array(o.length+1);let j=0;for(let i=0;i<o.length;i++){m[i]=j;if(j<n.length&&o[i]===n[j])j++}m[o.length]=j;return m};
-const remapHl=(hl,secs)=>Object.fromEntries(Object.entries(hl).map(([i,arr])=>{const s=secs[i];if(!s||!s.o||s.o===s.t)return[i,arr];const m=mapOff(s.o,s.t);return[i,arr.map(h=>[m[h[0]]??h[0],m[h[1]]??h[1],h[2]]).filter(h=>h[1]>h[0])]}));
+const remapHl=(hl,secs)=>Object.fromEntries(Object.entries(hl).map(([i,arr])=>{const s=secs[i];if(!s||!s.o||s.o===s.t)return[i,arr];const m=mapOff(s.o,s.t);return[i,arr.map(h=>[m[h[0]]??h[0],m[h[1]]??h[1],...h.slice(2)]).filter(h=>h[1]>h[0])]}));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const isSup=p=>/(^|\/)대법원[_/]/.test(p);
-const rm=(d,ids)=>{const docs={...d.docs};ids.forEach(i=>delete docs[i]);return{...d,docs,lists:(d.lists||[]).map(l=>({...l,ids:l.ids.filter(i=>!ids.includes(i))}))}};
+const rm=(d,ids)=>{const docs={...d.docs};ids.forEach(i=>delete docs[i]);return{...d,docs,issues:(d.issues||[]).map(q=>({...q,items:q.items.filter(t=>!ids.includes(t.docId))})),lists:(d.lists||[]).map(l=>({...l,ids:l.ids.filter(i=>!ids.includes(i))}))}};
+const dropItems=(d,ids)=>{const S=new Set(ids);return{...d,issues:(d.issues||[]).map(q=>({...q,items:q.items.filter(t=>!S.has(t.id))})),docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,r.hl&&Object.values(r.hl).some(a=>a.some(h=>S.has(h[3])))?{...r,hl:Object.fromEntries(Object.entries(r.hl).map(([i,a])=>[i,a.filter(h=>!S.has(h[3]))]))}:r]))}};
 const findByName=async(no,tok)=>{const kw=(no.match(/[가-힣]+/)||[''])[0];
  const hint=/^(다|마|카|라|아|자|차|가|나)/.test(kw)?'민사':/^(도|모|오|초|노|고|재)/.test(kw)?'형사':/^(두|누|구)/.test(kw)?'일반행정':/^(므|스|드|르|느)/.test(kw)?'가사':/^(후|허)/.test(kw)?'특허':'';
  const order=[...(hint?[hint]:[]),...CATS.filter(c=>c!==hint)],found=[];
@@ -280,7 +281,7 @@ function Library({kind,srcs,D,setD,tok,open}){
  const patch=f=>setD(d=>({...d,docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,ck.includes(k)?{...r,tags:f(r.tags)}:r]))}));
  const addT=()=>{const ts=tn.split(',').map(t=>t.trim().replace(/^#/,'')).filter(Boolean);if(ts.length&&ck.length)patch(a=>[...new Set([...a,...ts])]);setTn('')};
  const fromList=()=>{setD(d=>({...d,lists:d.lists.map(l=>l.id===v?{...l,ids:l.ids.filter(i=>!ck.includes(i))}:l)}));setChk([])};
- const delLib=()=>{if(ck.length&&confirm(`${ck.length}건을 서재에서 삭제합니다.\n태그·밑줄이 함께 사라지고 모든 리스트에서 빠집니다.`)){setD(d=>rm(d,ck));setChk([])}};
+ const delLib=()=>{if(ck.length&&confirm(`${ck.length}건을 서재에서 삭제합니다.\n태그·밑줄(쟁점 카드 포함)이 함께 사라지고 모든 리스트에서 빠집니다.`)){setD(d=>rm(d,ck));setChk([])}};
  const xfer=(lid,move)=>{const t=(D.lists||[]).find(l=>l.id===lid);if(!t||!ck.length)return;const dup=ck.filter(i=>t.ids.includes(i)).length;
   setD(d=>({...d,lists:d.lists.map(l=>l.id===lid?{...l,ids:[...new Set([...l.ids,...ck])]}:move&&l.id===v?{...l,ids:l.ids.filter(i=>!ck.includes(i))}:l)}));
   setNote(`${ck.length-dup}건 ${move?'이동':'추가'}${dup?` · ${dup}건은 이미 있어 중복 제외`:''} → ${t.name}`);if(move)setChk([])};
@@ -322,17 +323,127 @@ function Library({kind,srcs,D,setD,tok,open}){
    {ex&&<ExportModal jobs={ex} onClose={()=>setEx(null)}/>}
  </div>}
 
+P.fo='<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>';
+const issNo=iss=>{const c={},m={};iss.slice().sort((a,b)=>(a.created||0)-(b.created||0)).forEach(x=>{const k=x.folder||'';c[k]=(c[k]||0)+1;m[x.id]=String(c[k]).padStart(3,'0')});return m};
+const NumT=({n})=><span className="text-[10px] text-[#AAA] tabular-nums mr-1.5 font-normal">{n}</span>;
+const lastTs=x=>Math.max(x.created||0,...x.items.map(t=>t.ts||0));
+const CL={display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden',whiteSpace:'pre-wrap',wordBreak:'break-word'};
+const Chk=({on})=><span className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center ${on?'bg-[#111] border-[#111] text-white':'border-[#CCC]'}`}>{on&&<Ic n="ck" s={11}/>}</span>;
+const FIN="flex-1 min-w-0 h-9 px-2.5 text-sm border border-[#E5E5E5] rounded-md outline-none focus:border-[#111] bg-transparent";
+
+function IssuePick({text,issues,folders,onPick,onNew,onClose}){
+ const [n,setN]=useState(''),[f,setF]=useState(''),nums=issNo(issues),fn=id=>(folders.find(x=>x.id===id)||{}).name;
+ const list=issues.filter(x=>x.name.includes(f.trim())).sort((a,b)=>lastTs(b)-lastTs(a));
+ const add=()=>{const t=n.trim();if(t)onNew(t)};
+ return ReactDOM.createPortal(<Modal title="쟁점에 연결" onClose={onClose}>
+  <p className="text-xs text-[#555] leading-relaxed mb-3 pl-2 border-l-2 border-[#CCC]" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden',whiteSpace:'pre-wrap'}}>{text}</p>
+  {issues.length>0&&<>
+   <p className="text-xs text-[#777] mb-1.5">기존 쟁점</p>
+   {issues.length>6&&<input value={f} onChange={e=>setF(e.target.value)} placeholder="쟁점 찾기" className={FIN+" w-full mb-1.5"}/>}
+   <div className="sb max-h-52 overflow-y-auto mb-3">
+    {list.map(x=><button key={x.id} onClick={()=>onPick(x.id)} className="w-full flex items-center gap-2 px-1 py-2.5 text-left text-sm rounded-md hover:bg-[#F6F6F4]"><span className="flex-1 min-w-0 truncate"><NumT n={nums[x.id]}/>{x.name}{x.folder&&fn(x.folder)&&<span className="text-[11px] text-[#AAA] ml-1.5">{fn(x.folder)}</span>}</span><span className="text-xs text-[#999]">{x.items.length}</span></button>)}
+    {!list.length&&<p className="py-3 text-center text-xs text-[#999]">일치하는 쟁점이 없습니다</p>}</div></>}
+  <p className="text-xs text-[#777] mb-1.5">새로 만들기</p>
+  <div className="flex gap-1.5"><input value={n} onChange={e=>setN(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="새 쟁점 제목" className={FIN}/><button onClick={add} disabled={!n.trim()} className={SB+" h-9 disabled:opacity-30"}>만들어 연결</button></div>
+ </Modal>,document.body)}
+
+function Issues({D,setD,open}){
+ const iss=D.issues||[];
+ const [v,setV]=usePS('iss:v',null),[q,setQ]=usePS('iss:q',''),[chk,setChk]=useState(null),[pop,setPop]=useState(null),[note,setNote]=useState(''),[mvo,setMvo]=useState('');
+ const cur=iss.find(x=>x.id===v),fl=D.folders||[],[fv,setFv]=usePS('iss:f',null),curF=fl.find(x=>x.id===fv),nums=issNo(iss),[mvf,setMvf]=useState('');
+ useEffect(()=>{if(v&&!cur)setV(null)},[v,cur]);
+ useEffect(()=>{if(fv&&!curF)setFv(null)},[fv,curF]);
+ const goF=x=>{setFv(x);setQ('');setChk(null);setNote('')};
+ const newFolder=()=>{const n=(prompt('새 폴더 이름')||'').trim();if(n)setD(d=>({...d,folders:[...(d.folders||[]),{id:uid(),name:n,created:Date.now()}]}))};
+ const renF=()=>{const n=(prompt('폴더 이름',curF.name)||'').trim();if(n)setD(d=>({...d,folders:d.folders.map(f=>f.id===fv?{...f,name:n}:f)}))};
+ const delF=()=>{const c=iss.filter(x=>x.folder===fv).length;if(!confirm(`폴더 "${curF.name}"을(를) 삭제합니다.`+(c?`\n안의 쟁점 ${c}개는 삭제되지 않고 폴더 밖으로 나옵니다.`:'')))return;
+  setD(d=>({...d,folders:d.folders.filter(f=>f.id!==fv),issues:(d.issues||[]).map(x=>x.folder===fv?{...x,folder:null}:x)}));goF(null)};
+ const moveF=t=>{if(!ck.length)return;const to=t==='__root'?null:t,nm=to?(fl.find(f=>f.id===to)||{}).name:'폴더 밖';
+  setD(d=>({...d,issues:d.issues.map(x=>ck.includes(x.id)?{...x,folder:to}:x)}));setNote(`${ck.length}개 이동 → ${nm}`);setChk([])};
+ const terms=q.trim().split(/\s+/).filter(Boolean),hit=s=>terms.every(t=>s.includes(t)),istr=t=>[t.text,t.title,t.meta,t.sec].join(' ');
+ const go=x=>{setV(x);setQ('');setChk(null);setPop(null);setNote('')};
+ const ck=chk||[],toggle=id=>setChk(c=>c.includes(id)?c.filter(x=>x!==id):[...c,id]);
+ const newIssue=()=>{const n=(prompt('새 쟁점 제목')||'').trim();if(n)setD(d=>({...d,issues:[...(d.issues||[]),{id:uid(),name:n,created:Date.now(),folder:fv||null,items:[]}]}))};
+ const ren=()=>{const n=(prompt('쟁점 제목',cur.name)||'').trim();if(n)setD(d=>({...d,issues:d.issues.map(x=>x.id===v?{...x,name:n}:x)}))};
+ const delIssues=ids=>{const t=iss.filter(x=>ids.includes(x.id));if(!t.length)return;const n=t.reduce((a,x)=>a+x.items.length,0);
+  if(!confirm(t.length===1?`쟁점 "${t[0].name}"을(를) 삭제합니다.`+(n?`\n연결된 밑줄 ${n}개도 판례에서 함께 삭제됩니다.`:''):`쟁점 ${t.length}개를 삭제합니다.`+(n?`\n연결된 밑줄 ${n}개도 판례에서 함께 삭제됩니다.`:'')))return;
+  setD(d=>{const nd=dropItems(d,t.flatMap(x=>x.items.map(i=>i.id)));return{...nd,issues:nd.issues.filter(x=>!ids.includes(x.id))}});
+  setChk(null);if(ids.includes(v))go(null)};
+ const delItems=(ids,ask)=>{if(!ids.length)return;if(ask&&!confirm(`카드 ${ids.length}개를 쟁점에서 삭제합니다.\n판례의 해당 밑줄도 함께 삭제됩니다.`))return;setD(d=>dropItems(d,ids));setChk(c=>c?[]:c);setPop(null)};
+ const moveItems=tid=>{const t=iss.find(x=>x.id===tid);if(!t||!ck.length)return;const mv=cur.items.filter(i=>ck.includes(i.id));
+  setD(d=>({...d,issues:d.issues.map(x=>x.id===v?{...x,items:x.items.filter(i=>!ck.includes(i.id))}:x.id===tid?{...x,items:[...x.items,...mv]}:x)}));
+  setNote(`${mv.length}개 이동 → ${t.name}`);setChk([])};
+ const jump=t=>{setPop(null);open(t.repo,t.path,false,null,{i:t.i,id:t.id})};
+ const bar=children=><div className="border-t border-[#E5E5E5] px-3 py-2 pb-[max(.5rem,env(safe-area-inset-bottom))]">{note&&<p className="text-xs text-[#7C8B74] mb-2">{note}</p>}<div className="flex items-center gap-1.5 flex-wrap">{children}</div></div>;
+ const SearchBox=ph=><div className="px-4 pt-2"><div className="flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
+  <input value={q} onChange={e=>setQ(e.target.value)} placeholder={ph} className="flex-1 min-w-0 outline-none text-sm bg-transparent"/>{q&&<button onClick={()=>setQ('')} className="text-[#999] hover:text-[#111]"><Ic n="x" s={14}/></button>}</div></div>;
+ const SelBtn=<button onClick={()=>{setChk(c=>c?null:[]);setNote('')}} className={`h-8 px-2.5 text-xs rounded-md border transition-colors ${chk?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#555]'}`}>선택</button>;
+
+ if(!cur){
+  const scope=terms.length?iss:iss.filter(x=>(x.folder||null)===(fv||null));
+  const rows=scope.map(x=>({x,m:terms.length?x.items.filter(t=>hit(istr(t))).length:0})).filter(({x,m})=>!terms.length||hit(x.name)||m>0).sort((a,b)=>(a.x.created||0)-(b.x.created||0));
+  const fr=!terms.length&&!fv?fl.slice().sort((a,b)=>(a.created||0)-(b.created||0)):[];
+  const fn=id=>(fl.find(f=>f.id===id)||{}).name;
+  return <div className="flex flex-col min-h-0 flex-1">
+   <div className="px-4 pt-3 flex items-center gap-1.5">
+    {curF&&<button onClick={()=>goF(null)} className="text-[#777] hover:text-[#111] -ml-1 h-8 w-7 flex items-center shrink-0"><Ic n="cl" s={16}/></button>}
+    <span className={`flex-1 min-w-0 truncate ${curF?'text-sm font-medium t':'text-xs text-[#777]'}`}>{curF?curF.name:'쟁점 '+iss.length}{curF&&<span className="text-xs text-[#999] font-light ml-1.5">{rows.length}</span>}</span>
+    {curF&&<><button onClick={renF} className={IB} title="폴더 이름 수정"><Ic n="pe" s={15}/></button><button onClick={delF} className={IB} title="폴더 삭제"><Ic n="tr" s={15}/></button></>}
+    {rows.length>0&&SelBtn}
+    {!curF&&<button onClick={newFolder} className={SB}>+ 폴더</button>}
+    <button onClick={newIssue} className={SB}>+ 새 쟁점</button></div>
+   {SearchBox('쟁점·내용 검색')}
+   <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
+    {!rows.length&&!fr.length&&(iss.length&&terms.length?<Empty t="조건에 맞는 쟁점이 없습니다"/>:curF?<Empty t="폴더가 비어 있습니다"/>:<><Empty t="아직 쟁점이 없습니다"/><p className="px-4 text-xs text-[#999] leading-relaxed text-center">판례를 열어 단락을 선택하고 밑줄 버튼을 누르면 쟁점에 연결할 수 있습니다.</p></>)}
+    {fr.map(f=><Row key={f.id} onClick={()=>goF(f.id)} a={f.name} b={'쟁점 '+iss.filter(x=>x.folder===f.id).length+'개'} left={<span className="text-[#999]"><Ic n="fo" s={16}/></span>} right={<span className="text-[#BBB]"><Ic n="cr" s={15}/></span>}/>)}
+    {rows.map(({x,m})=><Row key={x.id} onClick={()=>chk?toggle(x.id):go(x.id)} a={<><NumT n={nums[x.id]}/>{x.name}</>} b={(terms.length&&x.folder&&fn(x.folder)?fn(x.folder)+' · ':'')+x.items.length+'개 단락'+(m?` · 일치 ${m}개`:'')} left={chk&&<Chk on={ck.includes(x.id)}/>} right={!chk&&<span className="text-[#BBB]"><Ic n="cr" s={15}/></span>}/>)}
+   </div>
+   {chk&&bar(<><span className="text-xs text-[#777] mr-1">{ck.length}개</span>
+    <button onClick={()=>setChk(ck.length===rows.length?[]:rows.map(r=>r.x.id))} className={SB}>{ck.length===rows.length&&rows.length?'해제':'전체'}</button>
+    {(fl.length>0||curF)&&<select value={mvf} onChange={e=>{const t=e.target.value;setMvf('');if(t)moveF(t)}} disabled={!ck.length} className={SB+" bg-white disabled:opacity-30"}><option value="">폴더로 이동</option>{iss.some(x=>x.folder)&&<option value="__root">(폴더 밖으로)</option>}{fl.filter(f=>f.id!==fv).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select>}
+    <button onClick={()=>delIssues(ck)} disabled={!ck.length} className={SB+" !text-[#8a5a44] disabled:opacity-30"}>쟁점 삭제</button></>)}
+  </div>}
+
+ const cards=cur.items.filter(t=>!terms.length||hit(istr(t))),pt=pop&&cur.items.find(t=>t.id===pop);
+ return <div className="flex flex-col min-h-0 flex-1">
+  <div className="px-4 pt-3 flex items-center gap-0.5">
+   <button onClick={()=>go(null)} className="text-[#777] hover:text-[#111] -ml-1 h-8 w-7 flex items-center"><Ic n="cl" s={16}/></button>
+   <b className="flex-1 min-w-0 truncate text-sm font-medium t"><NumT n={nums[cur.id]}/>{cur.name}<span className="text-xs text-[#999] font-light ml-1.5">{cur.items.length}</span></b>
+   <button onClick={ren} className={IB} title="제목 수정"><Ic n="pe" s={15}/></button><button onClick={()=>delIssues([cur.id])} className={IB} title="쟁점 삭제"><Ic n="tr" s={15}/></button>
+   {cur.items.length>0&&SelBtn}
+  </div>
+  {SearchBox('단락·판례 검색')}
+  <div className="sb flex-1 overflow-y-auto px-4 pt-3 pb-4">
+   {!cards.length&&(cur.items.length?<Empty t="조건에 맞는 단락이 없습니다"/>:<><Empty t="연결된 단락이 없습니다"/><p className="text-xs text-[#999] leading-relaxed text-center">판례에서 단락을 선택하고 밑줄 버튼을 누른 뒤 이 쟁점을 고르면 카드가 추가됩니다.</p></>)}
+   {cards.map(t=><button key={t.id} onClick={()=>chk?toggle(t.id):setPop(t.id)} className={`w-full text-left flex gap-2.5 rounded-lg border p-3 mb-2 transition-colors hover:bg-[#F6F6F4] ${ck.includes(t.id)?'border-[#111]':'border-[#E5E5E5]'}`}>
+    {chk&&<span className="pt-0.5"><Chk on={ck.includes(t.id)}/></span>}
+    <span className="flex-1 min-w-0 block">
+     <span className="flex items-center gap-1.5 mb-1.5 text-[11px] text-[#999]"><span className="truncate">{t.title}</span>{t.sec&&<span className={RC}>{t.sec}</span>}</span>
+     <span className="text-sm leading-relaxed text-black" style={CL}><u className="ul" style={{cursor:'inherit'}}>{t.text}</u></span></span></button>)}
+  </div>
+  {chk&&bar(<><span className="text-xs text-[#777] mr-1">{ck.length}개</span>
+   <button onClick={()=>setChk(ck.length===cards.length?[]:cards.map(t=>t.id))} className={SB}>{ck.length===cards.length&&cards.length?'해제':'전체'}</button>
+   {iss.length>1&&<select value={mvo} onChange={e=>{const t=e.target.value;setMvo('');if(t)moveItems(t)}} disabled={!ck.length} className={SB+" bg-white disabled:opacity-30"}><option value="">다른 쟁점으로 이동</option>{iss.filter(x=>x.id!==v).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
+   <button onClick={()=>delItems(ck,true)} disabled={!ck.length} className={SB+" !text-[#8a5a44] disabled:opacity-30"}>쟁점에서 삭제</button></>)}
+  {pt&&ReactDOM.createPortal(<Modal title={pt.title} onClose={()=>setPop(null)}>
+   <p className="text-xs text-[#999] mb-3">{[cur.name,pt.meta,pt.sec].filter(Boolean).join(' · ')}</p>
+   <div className="text-sm leading-[1.85] whitespace-pre-wrap break-words mb-4"><u className="ul" style={{cursor:'text'}}>{pt.text}</u></div>
+   <div className="flex gap-2"><button onClick={()=>jump(pt)} className="flex-1 h-10 rounded-md bg-[#111] text-white text-sm">출처 판례로 이동</button>
+    <button onClick={()=>delItems([pt.id],false)} className="h-10 px-4 rounded-md border border-[#E5E5E5] text-sm text-[#8a5a44]">삭제</button></div>
+  </Modal>,document.body)}
+ </div>}
+
 function Side({kind,D,setD,tok,open}){
  const srcs=kind==='p'?[{repo:'precedent-kr',root:'',l:'판례'}]:[{repo:'legalize-kr',root:'kr',l:'법령'},{repo:'admrule-kr',root:'',l:'행정규칙'}];
  const has=Object.values(D.docs).some(d=>srcs.some(s=>s.repo===d.repo))||(D.lists||[]).some(l=>l.kind===kind);
  const [tab,setTab]=usePS('side:'+kind+':tab',has?'lib':'find'),[si,setSi]=usePS('side:'+kind+':si',0);
  const T=(k,l)=><button onClick={()=>setTab(k)} className={`h-10 text-sm border-b transition-colors ${tab===k?'border-[#111] text-[#111]':'border-transparent text-[#999]'}`}>{l}</button>;
  return <div className="flex flex-col h-full">
-  <div className="flex gap-5 px-4 border-b border-[#E5E5E5]">{T('lib','서재')}{T('find','탐색')}</div>
+  <div className="flex gap-5 px-4 border-b border-[#E5E5E5]">{T('lib','서재')}{kind==='p'&&T('iss','쟁점')}{T('find','탐색')}</div>
   {tab==='find'?<>
    {srcs.length>1&&<div className="flex gap-1 px-4 pt-3">{srcs.map((s,i)=><button key={s.repo} onClick={()=>setSi(i)} className={`px-2.5 h-7 text-xs rounded-full border transition-colors ${si===i?'bg-[#E6EBE1] border-[#E6EBE1] text-[#111]':'border-[#E5E5E5] text-[#777]'}`}>{s.l}</button>)}</div>}
    {kind==='p'?<CaseSearch tok={tok} open={open}/>:<Browse key={srcs[si].repo} repo={srcs[si].repo} root={srcs[si].root} tok={tok} open={open}/>}</>:
-  <Library kind={kind} srcs={srcs} D={D} setD={setD} tok={tok} open={open}/>}
+  tab==='iss'&&kind==='p'?<Issues D={D} setD={setD} open={open}/>:<Library kind={kind} srcs={srcs} D={D} setD={setD} tok={tok} open={open}/>}
  </div>}
 
 const MK=/^(\s*)(\[\d+\]|\d{1,2}\.|[가나다라마바사아자차카타파하]\.)(?=\s|$)/;
@@ -372,7 +483,7 @@ function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs,law}){
     for(const [r,c] of rx){const m=ln.match(r);if(m){mr.push([a+m[1].length,a+m[1].length+m[2].length,c]);break}}}
    const seg=(x,y,key)=>{const n=[];let q=x;mr.forEach(([ms,me,c],j)=>{const st=Math.max(ms,x),e=Math.min(me,y);if(e<=st)return;if(st>q)n.push(s.t.slice(q,st));const tx=s.t.slice(st,e);n.push(c==='b'?<b key={key+j} className="font-semibold">{tx}</b>:<span key={key+j} className={'hl '+c}>{tx}</span>);q=e});if(!n.length)return s.t.slice(x,y);if(q<y)n.push(s.t.slice(q,y));return n};
   hls.map((h,idx)=>[h,idx]).filter(([h])=>h[1]>a&&h[0]<b).sort((x,y)=>x[0][0]-y[0][0]).forEach(([h,idx])=>{const st=Math.max(h[0],p,a),e=Math.min(h[1],b);if(st>=e)return;
-   if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<u key={idx+'-'+k} data-h={idx} className={'ul'+(sel&&sel.i===i&&sel.k===idx?' sel':'')}>{seg(st,e,'m'+idx)}</u>);p=e});
+   if(st>p)kids.push(seg(p,st,'p'+idx));kids.push(<u key={idx+'-'+k} data-h={idx} data-hid={h[3]||undefined} className={'ul'+(sel&&sel.i===i&&sel.k===idx?' sel':'')}>{seg(st,e,'m'+idx)}</u>);p=e});
   if(p<b)kids.push(seg(p,b,'e'));
   out.push(s.hd.includes(k)?<b key={k} data-a={i+'-'+k} className="font-semibold">{kids}</b>:<span key={k}>{kids}</span>,'\n');o=b+1});
  const body=<div data-b className="whitespace-pre-wrap break-words leading-[1.85] pb-6 text-black font-normal" style={{fontSize:fs}} onPointerUp={e=>onSel(i,e.currentTarget)} onClick={e=>{const sl=getSelection();if(sl&&!sl.isCollapsed)return;const m=e.target.closest('u[data-h]');onU(m?{i,k:+m.dataset.h}:null)}}>{out}</div>;
@@ -386,15 +497,21 @@ function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
  const [L,setL]=usePS('L',innerWidth>=1024),[R,setR]=usePS('R',false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
  const [toc,setToc]=useState(false),[info,setInfo]=useState(false),[lm,setLm]=useState(false),[rl,setRl]=useState(false),[ex,setEx]=useState(false),[mp,setMp]=useState(false),[bar,setBar]=usePS('bar',true),[nav,setNav]=useState(()=>rj('nav')),[nl,setNl]=useState('');
- const [op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
+ const [pend,setPend]=useState(null),[op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
- const open=async(repo,path,keep,ctx)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
-  try{const d=await fetchDoc(repo,path);setD(x=>{const r=x.docs[d.id];if(!r)return x;let n=r;if(r.leg){n={...n};delete n.leg;if(d.repo!=='precedent-kr'&&r.hl&&Object.keys(r.hl).length)n.hl=remapHl(r.hl,d.secs)}if(n.title!==d.title||n.meta!==d.meta)n={...n,title:d.title,meta:d.meta};return n===r?x:{...x,docs:{...x.docs,[d.id]:n}}});
+ const open=async(repo,path,keep,ctx,jmp)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
+  try{const d=await fetchDoc(repo,path);setD(x=>{const r=x.docs[d.id];if(!r)return x;let n=r;if(r.leg){n={...n};delete n.leg;if(d.repo!=='precedent-kr'&&r.hl&&Object.keys(r.hl).length)n.hl=remapHl(r.hl,d.secs)}if(n.title!==d.title||n.meta!==d.meta)n={...n,title:d.title,meta:d.meta};
+   let iss=x.issues;
+   if(d.repo==='precedent-kr'&&Object.values(n.hl||{}).some(a=>a.some(h=>h.length<4))){const items=[],hl2={};
+    Object.entries(n.hl).forEach(([i,a])=>{hl2[i]=a.map(h=>{if(h.length>=4)return h;const id=uid(),sc=d.secs[i];items.push({id,docId:d.id,repo:d.repo,path:d.path,i:+i,sec:(sc&&sc.h)||'',text:sc?sc.t.slice(h[0],h[1]).trim():'',title:d.title,meta:d.meta,ts:Date.now()});return[h[0],h[1],h[2],id]})});
+    n={...n,hl:hl2};const base=iss||[];iss=base.some(q=>q.id==='misc')?base.map(q=>q.id==='misc'?{...q,items:[...q.items,...items]}:q):[...base,{id:'misc',name:'미분류 (기존 밑줄)',created:Date.now(),items}]}
+   return n===r&&iss===x.issues?x:{...x,issues:iss,docs:{...x.docs,[d.id]:n}}});
    const keys=d.secs.filter(s=>s.h&&KEY.test(s.h));const first=d.secs.find(s=>s.h);const o={};
    d.secs.forEach((s,i)=>{o[i]=repo!=='precedent-kr'||(keys.length?KEY.test(s.h):s===first)});
    const sv=keep&&rj('op');setOp(sv&&sv.id===d.id?sv.op:o);setDoc(d);if(ctx)setNav(ctx);else if(!keep)setNav(null);try{localStorage.setItem('ui:doc',JSON.stringify({repo,path}))}catch{}
-   setTimeout(()=>{const y=keep&&rj('y');if(sc.current)sc.current.scrollTo(0,y&&y.id===d.id?y.y:0)},80)}catch(e){setErr(e.message)}setBusy(false)};
+   setTimeout(()=>{if(jmp){setOp(o=>({...o,[jmp.i]:true}));setTimeout(()=>{const el=document.querySelector(`u[data-hid="${jmp.id}"]`);if(el){el.scrollIntoView({block:'center'});try{el.animate([{backgroundColor:'#F3E3A0'},{backgroundColor:'transparent'}],{duration:2000})}catch{}}},320);return}
+    const y=keep&&rj('y');if(sc.current)sc.current.scrollTo(0,y&&y.id===d.id?y.y:0)},80)}catch(e){setErr(e.message)}setBusy(false)};
  useEffect(()=>{const c=rj('doc');if(c&&c.repo&&c.path)open(c.repo,c.path,true)},[]);
  useEffect(()=>{if(doc)try{localStorage.setItem('ui:op',JSON.stringify({id:doc.id,op}))}catch{}},[op,doc]);
  const st=useRef();const onScroll=e=>{const y=e.target.scrollTop;clearTimeout(st.current);st.current=setTimeout(()=>{if(doc)try{localStorage.setItem('ui:y',JSON.stringify({id:doc.id,y}))}catch{}},150)};
@@ -403,11 +520,13 @@ function App(){
  const addHl=(i,h)=>upd(r=>({...r,hl:{...r.hl,[i]:[...(r.hl[i]||[]),h]}}));
  const delHl=(i,k)=>upd(r=>({...r,hl:{...r.hl,[i]:r.hl[i].filter((_,x)=>x!==k)}}));
  const pickU=v=>setDsel(p=>v&&p&&p.i===v.i&&p.k===v.k?null:v);
- const delSel=()=>{if(dsel){delHl(dsel.i,dsel.k);setDsel(null)}};
+ const delSel=()=>{if(!dsel)return;const h=(hl[dsel.i]||[])[dsel.k],{i,k}=dsel;
+  setD(d=>{const r=d.docs[doc.id];if(!r)return d;const nd={...d,docs:{...d.docs,[doc.id]:{...r,hl:{...r.hl,[i]:r.hl[i].filter((_,x)=>x!==k)}}}};return h&&h[3]?dropItems(nd,[h[3]]):nd});setDsel(null)};
+ const startUl=(i,a,b,c)=>{if(doc.repo!=='precedent-kr')return addHl(i,[a,b,c]);const text=doc.secs[i].t.slice(a,b);if(!text.trim())return;setPend({i,s:a,e:b,text})};
  const onSel=(i,box)=>setTimeout(()=>{if(!tool)return;const s=getSelection();if(!s.rangeCount||s.isCollapsed)return;const r=s.getRangeAt(0);
   if(!box.contains(r.startContainer)||!box.contains(r.endContainer))return;const pre=document.createRange();pre.selectNodeContents(box);pre.setEnd(r.startContainer,r.startOffset);
-  const a=pre.toString().length;addHl(i,[a,a+r.toString().length,tool]);s.removeAllRanges()},30);
- const pick=c=>{setTool(t=>t===c?null:c);const s=getSelection();if(s&&!s.isCollapsed){const n=s.anchorNode&&(s.anchorNode.nodeType===3?s.anchorNode.parentElement:s.anchorNode).closest('[data-b]');if(n){const i=[...document.querySelectorAll('[data-b]')].indexOf(n);const idx=doc.secs.map((x,k)=>k);const r=s.getRangeAt(0);if(n.contains(r.endContainer)){const pre=document.createRange();pre.selectNodeContents(n);pre.setEnd(r.startContainer,r.startOffset);const a=pre.toString().length;addHl(idx[i],[a,a+r.toString().length,c]);s.removeAllRanges()}}}};
+  const a=pre.toString().length;startUl(i,a,a+r.toString().length,tool);s.removeAllRanges()},30);
+ const pick=c=>{setTool(t=>t===c?null:c);const s=getSelection();if(s&&!s.isCollapsed){const n=s.anchorNode&&(s.anchorNode.nodeType===3?s.anchorNode.parentElement:s.anchorNode).closest('[data-b]');if(n){const i=[...document.querySelectorAll('[data-b]')].indexOf(n);const idx=doc.secs.map((x,k)=>k);const r=s.getRangeAt(0);if(n.contains(r.endContainer)){const pre=document.createRange();pre.selectNodeContents(n);pre.setEnd(r.startContainer,r.startOffset);const a=pre.toString().length;startUl(idx[i],a,a+r.toString().length,c);s.removeAllRanges()}}}};
  const addTag=()=>{const t=tg.trim().replace(/^#/,'');if(t&&!tags.includes(t))upd(r=>({...r,tags:[...r.tags,t]}));setTg('')};
  const hasToc=!!doc&&doc.repo!=='precedent-kr'&&doc.secs.reduce((a,s)=>a+s.hd.length+(s.h?1:0),0)>1;
  const goToc=n=>{const closed=!op[n.i];setOp(o=>({...o,[n.i]:true}));setToc(false);setTimeout(()=>{const el=document.querySelector(`[data-a="${n.i}-${n.k}"]`);el&&el.scrollIntoView({block:'start'})},closed?280:80)};
@@ -420,6 +539,10 @@ function App(){
  useEffect(()=>{setD(d=>d.mig?d:{...d,mig:1,docs:Object.fromEntries(Object.entries(d.docs).map(([k,r])=>[k,{...r,leg:1}]))})},[]);
  const kindOf=doc&&(doc.repo==='precedent-kr'?'p':'l'),myLists=(D.lists||[]).filter(l=>l.kind===kindOf);
  const mkRec=()=>({id:doc.id,repo:doc.repo,path:doc.path,title:doc.title,meta:doc.meta,tags:[],hl:{}});
+ const linkIssue=(iid,name)=>{const p=pend;if(!p)return;const id=uid(),item={id,docId:doc.id,repo:doc.repo,path:doc.path,i:p.i,sec:doc.secs[p.i].h||'',text:p.text,title:doc.title,meta:doc.meta,ts:Date.now()};
+  setD(d=>{const r=d.docs[doc.id]||mkRec();let is=d.issues||[],tid=iid;if(!tid){tid=uid();is=[...is,{id:tid,name,created:Date.now(),items:[]}]}
+   is=is.map(q=>q.id===tid?{...q,items:[...q.items,item]}:q);
+   return{...d,issues:is,docs:{...d.docs,[doc.id]:{...r,hl:{...r.hl,[p.i]:[...(r.hl[p.i]||[]),[p.s,p.e,'a',id]]}}}}});setPend(null)};
  const toggleList=lid=>setD(d=>({...d,docs:d.docs[doc.id]?d.docs:{...d.docs,[doc.id]:mkRec()},lists:(d.lists||[]).map(l=>l.id!==lid?l:{...l,ids:l.ids.includes(doc.id)?l.ids.filter(i=>i!==doc.id):[...l.ids,doc.id]})}));
  const addList=()=>{const n=nl.trim();if(!n)return;setD(d=>({...d,docs:d.docs[doc.id]?d.docs:{...d.docs,[doc.id]:mkRec()},lists:[...(d.lists||[]),{id:uid(),name:n,kind:kindOf,ids:[doc.id]}]}));setNl('')};
  const inAny=doc&&(D.lists||[]).some(l=>l.ids.includes(doc.id));
@@ -444,6 +567,7 @@ function App(){
    <div className="h-full flex flex-col pt-[env(safe-area-inset-top)]"><div className="flex justify-end px-2 pt-1 lg:hidden"><Bt onClick={()=>side==='l'?setL(false):setR(false)}><Ic n="x"/></Bt></div><Side kind={kind} D={D} setD={setD} tok={tok} open={open}/></div></aside></>;
  return <div className="h-full">
   {drawer('l',L,'p')}{drawer('r',R,'l')}
+  {pend&&doc&&<IssuePick text={pend.text} issues={D.issues||[]} folders={D.folders||[]} onPick={id=>linkIssue(id)} onNew={n=>linkIssue(null,n)} onClose={()=>setPend(null)}/>}
   {info&&doc&&<Modal title="상세정보" onClose={()=>setInfo(false)}>
    <h2 className="t text-base font-normal leading-snug mb-3">{doc.title}</h2>
    <dl className="text-sm">{Object.entries(doc.fm||{}).filter(([k,v])=>v&&!/^(출처|source)$/i.test(k)).map(([k,v])=><div key={k} className="flex gap-3 py-1.5 border-t border-[#EEE]"><dt className="w-20 shrink-0 text-xs text-[#999] pt-0.5">{k}</dt><dd className="flex-1 min-w-0 break-words">{v}</dd></div>)}</dl>
