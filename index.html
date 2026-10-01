@@ -163,6 +163,54 @@ function Modal({title,onClose,children}){return <div className="fixed inset-0 z-
 
 const TAGC=[['#DDE6D3','#4A5A40'],['#EFE5CF','#6B5A33'],['#E4DCD6','#6A5548'],['#D9E3EA','#3E5566'],['#E9DAE0','#6B4757'],['#E0DCEB','#54496E'],['#D6E8E4','#3A5F58'],['#EBDDD0','#7A4E32']];
 const TagChip=({t})=>{let h=0;for(const ch of t)h=(h*31+ch.charCodeAt(0))>>>0;const [bg,fg]=TAGC[h%TAGC.length];return <span className="inline-flex items-center h-5 px-2 text-[11px] rounded-full whitespace-nowrap" style={{background:bg,color:fg}}>{t}</span>};
+P.dl='<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>';
+const jobsOf=a=>a.map(d=>({repo:d.repo,path:d.path,rec:d}));
+const crcT=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=crcT[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0};
+const zip=files=>{const te=new TextEncoder(),loc=[],cen=[];let off=0;
+ const h=(n,fn)=>{const b=new Uint8Array(n);fn(new DataView(b.buffer));return b};
+ files.forEach(f=>{const nm=te.encode(f.name),data=te.encode(f.text),crc=crc32(data),L=data.length,N=nm.length;
+  loc.push(h(30,v=>{v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);v.setUint16(6,0x0800,true);v.setUint16(12,0x21,true);v.setUint32(14,crc,true);v.setUint32(18,L,true);v.setUint32(22,L,true);v.setUint16(26,N,true)}),nm,data);
+  cen.push(h(46,v=>{v.setUint32(0,0x02014b50,true);v.setUint16(4,20,true);v.setUint16(6,20,true);v.setUint16(8,0x0800,true);v.setUint16(14,0x21,true);v.setUint32(16,crc,true);v.setUint32(20,L,true);v.setUint32(24,L,true);v.setUint16(28,N,true);v.setUint32(42,off,true)}),nm);off+=30+N+L});
+ const cs=cen.reduce((a,b)=>a+b.length,0),end=h(22,v=>{v.setUint32(0,0x06054b50,true);v.setUint16(8,files.length,true);v.setUint16(10,files.length,true);v.setUint32(12,cs,true);v.setUint32(16,off,true)});
+ return new Blob([...loc,...cen,end],{type:'application/zip'})};
+const dl=(name,blob)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
+const safeName=s=>s.replace(/[\\/:*?"<>|\r\n\t]+/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
+const exFile=(d,rec,o)=>{const fm=d.fm||{},prec=d.repo==='precedent-kr';let name=d.title;
+ if(prec){const p=d.path.split('/').pop().replace(/\.md$/,'').split('_');name=[fm.사건번호||p[1],fm.사건명||p.slice(2).join(' ')||d.title,fm.법원명||(isSup(d.path)?'대법원':'')].filter(Boolean).join(' ')}
+ name=safeName(name)||'문서';
+ let secs=d.secs.map((s,i)=>({s,i}));
+ if(prec&&!o.all){let z=-1;secs.forEach((x,k)=>{if(KEY.test(x.s.h))z=k});if(z>=0)secs=secs.slice(0,z+1)}
+ const rh=(rec&&rec.hl)||{},hl=o.ul?(rec&&rec.leg&&!prec&&Object.keys(rh).length?remapHl(rh,d.secs):rh):{};
+ const body=({s,i})=>{let a=0;const H=(hl[i]||[]).slice().sort((x,y)=>x[0]-y[0]);
+  return s.t.split('\n').map((ln,k)=>{const b=a+ln.length;let p=a,r='';
+   H.forEach(h=>{const st=Math.max(h[0],p,a),e=Math.min(h[1],b);if(e<=st||!s.t.slice(st,e).trim())return;r+=s.t.slice(p,st)+'<u>'+s.t.slice(st,e)+'</u>';p=e});
+   r+=s.t.slice(p,b);a=b+1;const j=s.hd.indexOf(k);return j>=0?'#'.repeat(Math.min(6,s.lv[j]||3))+' '+r:r}).join('\n').trim()};
+ const parts=['# '+name],mt=[d.meta,d.src].filter(Boolean).join('  \n> ');if(mt)parts.push('> '+mt);
+ secs.forEach(x=>{parts.push((x.s.h?'## '+x.s.h+'\n\n':'')+body(x))});
+ return{name,text:parts.join('\n\n')+'\n'}};
+function ExportModal({jobs,onClose}){
+ const [ul,setUl]=usePS('ex:ul',true),[all,setAll]=usePS('ex:all',false),[busy,setBusy]=useState(false),[msg,setMsg]=useState('');
+ const hasP=jobs.some(j=>j.repo==='precedent-kr');
+ const Seg=(v,set,opts)=><div className="flex gap-1.5">{opts.map(([x,l])=><button key={l} onClick={()=>set(x)} className={`flex-1 h-9 text-sm rounded-md border transition-colors ${v===x?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#666]'}`}>{l}</button>)}</div>;
+ const run=async()=>{setBusy(true);setMsg('');const files=[],used={};let fail=0;
+  for(let k=0;k<jobs.length;k++){setMsg(`${k+1}/${jobs.length}`);const j=jobs[k];
+   try{const d=j.d||await fetchDoc(j.repo,j.path),f=exFile(d,j.rec,{ul,all});let nm=f.name,c=1;while(used[nm.toLowerCase()])nm=f.name+' ('+(++c)+')';used[nm.toLowerCase()]=1;files.push({name:nm+'.md',text:f.text})}catch{fail++}}
+  if(!files.length){setMsg('내보내기에 실패했습니다. 네트워크를 확인하세요.');setBusy(false);return}
+  if(files.length===1)dl(files[0].name,new Blob([files[0].text],{type:'text/markdown;charset=utf-8'}));
+  else{const t=new Date(),p=n=>String(n).padStart(2,'0');dl('내보내기_'+t.getFullYear()+p(t.getMonth()+1)+p(t.getDate())+'.zip',zip(files))}
+  setMsg(`${files.length}건 저장`+(fail?` · ${fail}건 실패`:''));setBusy(false)};
+ return ReactDOM.createPortal(<Modal title={'MD 내보내기 · '+jobs.length+'건'} onClose={onClose}>
+  <p className="text-xs text-[#777] mb-1.5">밑줄</p>{Seg(ul,setUl,[[true,'포함'],[false,'미포함']])}
+  {hasP&&<><p className="text-xs text-[#777] mt-3 mb-1.5">판례 범위</p>{Seg(all,setAll,[[false,'판시사항·판결요지까지'],[true,'전부']])}</>}
+  <p className="text-[11px] text-[#999] mt-3 mb-3 leading-relaxed">{ul&&'밑줄은 <u> 태그로 들어갑니다. '}{jobs.length>1?'문서마다 개별 md 파일을 만들어 zip 하나로 묶어 저장합니다.':'md 파일 1개로 저장합니다.'}</p>
+  <button onClick={run} disabled={busy} className="w-full h-10 rounded-md bg-[#111] text-white text-sm disabled:opacity-30 transition-opacity">{busy?'처리 중 '+msg:'내보내기'}</button>
+  {!busy&&msg&&<p className="text-xs text-[#7C8B74] mt-2.5 text-center">{msg}</p>}
+ </Modal>,document.body)}
+const fmtD=t=>{const d=new Date(t),n=new Date();return d.getFullYear()===n.getFullYear()?(d.getMonth()+1)+'/'+d.getDate():String(d.getFullYear()).slice(2)+'.'+(d.getMonth()+1)+'.'+d.getDate()};
+const fmtFull=t=>{const d=new Date(t),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'. '+(d.getMonth()+1)+'. '+d.getDate()+'. '+p(d.getHours())+':'+p(d.getMinutes())};
+const RC="inline-flex items-center h-5 px-2 text-[11px] rounded-full whitespace-nowrap bg-[#F0F0EE] text-[#777]";
+const ReadChips=({r})=>{const a=(r&&r.reads)||[];if(!a.length)return null;return <><span className={RC}>읽음 {a.length}회</span><span className={RC}>최근 {fmtD(Math.max(...a))}</span></>};
 function Row({a,b,c,onClick,left,right}){return <button onClick={onClick} className="w-full text-left px-2 py-2 rounded-md hover:bg-[#F6F6F4] flex items-center gap-2.5 transition-colors">{left}
  <span className="flex-1 min-w-0"><span className="block text-sm truncate">{a}</span>{b&&<span className="block text-xs text-[#999] truncate">{b}</span>}{c&&<span className="flex flex-wrap gap-1 mt-1">{c}</span>}</span>{right}</button>}
 
@@ -206,7 +254,7 @@ function Multi({list,D,setD,tok,onBack}){
  </div>}
 
 function Library({kind,srcs,D,setD,tok,open}){
- const [v,setV]=usePS('lib:'+kind+':v',null),[q,setQ]=usePS('lib:'+kind+':q',''),[sel,setSel]=usePS('lib:'+kind+':sel',[]),[chk,setChk]=useState(null),[te,setTe]=useState(false),[tn,setTn]=useState(''),[mu,setMu]=useState(false),[note,setNote]=useState('');
+ const [v,setV]=usePS('lib:'+kind+':v',null),[q,setQ]=usePS('lib:'+kind+':q',''),[sel,setSel]=usePS('lib:'+kind+':sel',[]),[chk,setChk]=useState(null),[te,setTe]=useState(false),[tn,setTn]=useState(''),[mu,setMu]=useState(false),[note,setNote]=useState(''),[ex,setEx]=useState(null);
  const lists=(D.lists||[]).filter(l=>l.kind===kind),all=Object.values(D.docs).filter(d=>srcs.some(s=>s.repo===d.repo)),cur=lists.find(l=>l.id===v);
  useEffect(()=>{if(v&&v!=='all'&&!cur)setV(null)},[v,cur]);
  const go=x=>{setNote('');setV(x);setQ('');setSel([]);setChk(null);setTe(false);setMu(false)};
@@ -239,7 +287,8 @@ function Library({kind,srcs,D,setD,tok,open}){
    <button onClick={()=>go(null)} className="text-[#777] hover:text-[#111] -ml-1 h-8 w-7 flex items-center"><Ic n="cl" s={16}/></button>
    <b className="flex-1 min-w-0 truncate text-sm font-medium t">{v==='all'?'전체 보관함':cur.name}<span className="text-xs text-[#999] font-light ml-1.5">{base.length}</span></b>
    {cur&&<><button onClick={ren} className={IB} title="이름 수정"><Ic n="pe" s={15}/></button><button onClick={delList} className={IB} title="리스트 삭제"><Ic n="tr" s={15}/></button></>}
-   <button onClick={()=>{setChk(c=>c?null:[]);setTe(false)}} className={`h-8 px-2.5 text-xs rounded-md border transition-colors ${chk?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#555]'}`}>선택</button>
+   {shown.length>0&&<button onClick={()=>setEx(jobsOf(shown))} className={IB} title="MD로 내보내기"><Ic n="dl" s={15}/></button>}
+    <button onClick={()=>{setChk(c=>c?null:[]);setTe(false)}} className={`h-8 px-2.5 text-xs rounded-md border transition-colors ${chk?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#555]'}`}>선택</button>
   </div>
   <div className="px-4 pt-2 flex items-center gap-2"><div className="flex-1 min-w-0 flex items-center gap-2 border border-[#E5E5E5] rounded-md px-2.5 h-9 focus-within:border-[#111] transition-colors"><span className="text-[#999]"><Ic n="search" s={15}/></span>
    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="제목·태그 검색" className="flex-1 min-w-0 outline-none text-sm bg-transparent"/></div>
@@ -247,7 +296,7 @@ function Library({kind,srcs,D,setD,tok,open}){
   {tags.length>0&&<div className="px-4 pt-3 flex flex-wrap gap-1.5">{tags.map(t=><button key={t} onClick={()=>setSel(s=>s.includes(t)?s.filter(x=>x!==t):[...s,t])} className={`px-2 h-6 text-xs rounded-full border transition-colors ${sel.includes(t)?'bg-[#E6EBE1] border-[#E6EBE1]':'border-[#E5E5E5] text-[#666]'}`}>{t}</button>)}</div>}
   <div className="sb flex-1 overflow-y-auto px-2 pt-3 pb-4">
    {!shown.length&&<Empty t={base.length?'조건에 맞는 문서가 없습니다':'비어 있습니다'}/>}
-   {shown.map(d=><Row key={d.id} onClick={()=>chk?toggle(d.id):open(d.repo,d.path)} a={d.title} b={d.meta} c={d.tags.length>0&&d.tags.map(t=><TagChip key={t} t={t}/>)}
+   {shown.map(d=><Row key={d.id} onClick={()=>chk?toggle(d.id):open(d.repo,d.path)} a={d.title} b={d.meta} c={(d.tags.length>0||(d.reads||[]).length>0)&&<>{d.tags.map(t=><TagChip key={t} t={t}/>)}<ReadChips r={d}/></>}
     left={chk&&<span className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center ${ck.includes(d.id)?'bg-[#111] border-[#111] text-white':'border-[#CCC]'}`}>{ck.includes(d.id)&&<Ic n="ck" s={11}/>}</span>}/>)}
   </div>
   {chk&&<div className="border-t border-[#E5E5E5] px-3 py-2 pb-[max(.5rem,env(safe-area-inset-bottom))]">
@@ -260,11 +309,13 @@ function Library({kind,srcs,D,setD,tok,open}){
     <span className="text-xs text-[#777] mr-1">{ck.length}건</span>
     <button onClick={()=>setChk(ck.length===shown.length?[]:shown.map(d=>d.id))} className={SB}>{ck.length===shown.length&&shown.length?'해제':'전체'}</button>
     <button onClick={()=>setTe(!te)} className={`${SB} ${te?'bg-[#E6EBE1] border-[#E6EBE1]':''}`}>태그</button>
+     <button onClick={()=>ck.length&&setEx(jobsOf(picked))} disabled={!ck.length} className={SB+' disabled:opacity-30'}>내보내기</button>
     {lists.filter(l=>l.id!==v).length>0&&<select value="" onChange={e=>xfer(e.target.value,false)} className={SB+" bg-white"}><option value="">리스트에 추가</option>{lists.filter(l=>l.id!==v).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>}
     {cur&&lists.length>1&&<select value="" onChange={e=>xfer(e.target.value,true)} className={SB+" bg-white"}><option value="">리스트로 이동</option>{lists.filter(l=>l.id!==v).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select>}
     {cur&&<button onClick={fromList} className={SB}>목록에서 제거</button>}
     <button onClick={delLib} className={SB+" !text-[#8a5a44]"}>서재에서 삭제</button>
    </div></div>}
+   {ex&&<ExportModal jobs={ex} onClose={()=>setEx(null)}/>}
  </div>}
 
 function Side({kind,D,setD,tok,open}){
@@ -323,8 +374,8 @@ function Section({s,i,isOpen,toggle,hls,tool,onSel,onU,sel,fs}){
 function App(){
  const [D,setD]=useState(()=>{try{return{docs:{},fs:16,...JSON.parse(localStorage.getItem('lv2'))}}catch{return{docs:{},fs:16}}});
  const [L,setL]=usePS('L',innerWidth>=1024),[R,setR]=usePS('R',false),[doc,setDoc]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
- const [toc,setToc]=useState(false),[info,setInfo]=useState(false),[lm,setLm]=useState(false),[nl,setNl]=useState('');
- const [op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef();
+ const [toc,setToc]=useState(false),[info,setInfo]=useState(false),[lm,setLm]=useState(false),[rl,setRl]=useState(false),[ex,setEx]=useState(false),[nl,setNl]=useState('');
+ const [op,setOp]=useState({}),[tool,setTool]=useState(null),[dsel,setDsel]=useState(null),[tg,setTg]=useState('');const sc=useRef(),lp=useRef({t:null,f:false});
  useEffect(()=>{try{localStorage.setItem('lv2',JSON.stringify(D))}catch{}},[D]);
  const tok=(D.token||'').replace(/^\s*(bearer|token)\s+/i,'').replace(/[^\x21-\x7E]/g,'').replace(/^["']+|["']+$/g,'');
  const open=async(repo,path,keep)=>{setBusy(true);setErr('');if(!keep&&innerWidth<1024){setL(false);setR(false)}
@@ -360,6 +411,12 @@ function App(){
  const setAll=v=>setOp(Object.fromEntries(doc.secs.map((_,i)=>[i,v])));
  const setKey=()=>{const o={};doc.secs.forEach((s,i)=>o[i]=doc.repo!=='precedent-kr'||KEY.test(s.h))};
  const toggleSave=()=>{if(rec){if((rec.tags.length||Object.values(rec.hl).some(a=>a.length))&&!confirm('태그와 밑줄도 함께 삭제되고 리스트에서도 빠집니다.'))return;setD(d=>rm(d,[doc.id]))}else upd(r=>r)};
+ const reads=(rec&&rec.reads)||[];
+ const addRead=()=>{const now=Date.now();upd(r=>({...r,reads:[...(r.reads||[]),now]}))};
+ const delRead=k=>upd(r=>({...r,reads:(r.reads||[]).filter((_,x)=>x!==k)}));
+ const rdDown=()=>{lp.current.f=false;clearTimeout(lp.current.t);lp.current.t=setTimeout(()=>{lp.current.f=true;setRl(true);try{navigator.vibrate&&navigator.vibrate(15)}catch{}},500)};
+ const rdUp=()=>{clearTimeout(lp.current.t);if(!lp.current.f)addRead()};
+ const rdCancel=()=>clearTimeout(lp.current.t);
  const Bt=({on,children,...p})=><button {...p} className={`h-9 min-w-8 sm:min-w-9 px-1.5 sm:px-2 flex items-center justify-center rounded-md transition-colors hover:bg-[#F0F0EE] ${on?'bg-[#E6EBE1]':''} ${p.className||''}`}>{children}</button>;
  const drawer=(side,on,kind)=><><div onClick={()=>side==='l'?setL(false):setR(false)} className={`lg:hidden fixed inset-0 bg-black/20 z-20 transition-opacity ${on?'opacity-100':'opacity-0 pointer-events-none'}`}/>
   <aside className={`fixed top-0 bottom-0 z-30 w-[88vw] max-w-80 lg:w-80 bg-white transition-transform duration-200 ${side==='l'?'left-0 border-r':'right-0 border-r-0 border-l'} border-[#E5E5E5] ${on?'translate-x-0':side==='l'?'-translate-x-full':'translate-x-full'}`}>
@@ -373,6 +430,11 @@ function App(){
     {doc.src&&<a href={doc.src} target="_blank" rel="noreferrer" className="h-8 px-3 inline-flex items-center gap-1.5 text-xs border border-[#E5E5E5] rounded-md text-[#555] hover:border-[#111]"><Ic n="ext" s={13}/>원문</a>}
     <a href={`https://github.com/legalize-kr/${doc.repo}/blob/main/${enc(doc.path)}`} target="_blank" rel="noreferrer" className="h-8 px-3 inline-flex items-center gap-1.5 text-xs border border-[#E5E5E5] rounded-md text-[#555] hover:border-[#111]"><Ic n="ext" s={13}/>GitHub 파일</a></div>
    {(tags.length>0||inAny)&&<p className="text-xs text-[#7C8B74] mt-3 leading-relaxed">{tags.map(t=>'#'+t).join(' ')}{inAny&&<span className="block text-[#999]">리스트: {(D.lists||[]).filter(l=>l.ids.includes(doc.id)).map(l=>l.name).join(', ')}</span>}</p>}
+  </Modal>}
+  {ex&&doc&&<ExportModal jobs={[{repo:doc.repo,path:doc.path,rec,d:doc}]} onClose={()=>setEx(false)}/>}
+  {rl&&doc&&<Modal title="읽은 기록" onClose={()=>setRl(false)}>
+   {!reads.length&&<p className="text-xs text-[#999] py-2">읽은 기록이 없습니다.</p>}
+   {reads.map((t,k)=>({t,k})).reverse().map(({t,k})=><div key={k+'-'+t} className="flex items-center gap-2 py-2 border-b border-[#F0F0EE] last:border-0 text-sm"><span className="w-9 text-xs text-[#999]">{k+1}회</span><span className="flex-1 tabular-nums">{fmtFull(t)}</span><button onClick={()=>delRead(k)} title="삭제" className="p-1 text-[#999] hover:text-[#111]"><Ic n="x" s={15}/></button></div>)}
   </Modal>}
   {toc&&doc&&<Modal title={'목차 · '+doc.title} onClose={()=>setToc(false)}><Toc tree={buildToc(doc)} go={goToc}/></Modal>}
   {lm&&doc&&<Modal title="리스트에 담기" onClose={()=>setLm(false)}>
@@ -409,8 +471,10 @@ function App(){
      <datalist id="tl">{allTags.map(t=><option key={t} value={t}/>)}</datalist>
     </div>
     <div className="max-w-3xl mx-auto px-2 py-1 flex items-center gap-0.5 flex-wrap">
+     <button onPointerDown={rdDown} onPointerUp={rdUp} onPointerLeave={rdCancel} onPointerCancel={rdCancel} onContextMenu={e=>e.preventDefault()} title="읽음 +1 (꾹 누르면 기록)" style={{WebkitTouchCallout:'none',WebkitUserSelect:'none',userSelect:'none',touchAction:'manipulation'}} className={`ml-1 mr-1.5 w-8 h-8 shrink-0 rounded-full border flex items-center justify-center text-[11px] tabular-nums transition-colors active:bg-[#E6EBE1] ${reads.length?'border-[#7C8B74] text-[#4A5A40] bg-[#F3F6F0]':'border-[#CCC] text-[#999]'}`}>{reads.length}</button>
      <Bt on={inAny} onClick={()=>setLm(true)} title="리스트에 담기"><Ic n="ls" s={17}/></Bt>
      {hasToc&&<Bt onClick={()=>setToc(true)} title="목차"><Ic n="tc" s={17}/></Bt>}
+     <Bt onClick={()=>setEx(true)} title="MD로 내보내기"><Ic n="dl" s={17}/></Bt>
      <div className="flex-1"/>
      <Bt onClick={()=>setD(d=>({...d,fs:Math.max(13,d.fs-1)}))} title="글자 작게"><span className="text-xs">가</span></Bt>
      <Bt onClick={()=>setD(d=>({...d,fs:Math.min(24,d.fs+1)}))} title="글자 크게"><span className="text-base">가</span></Bt>
